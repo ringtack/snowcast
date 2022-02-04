@@ -1,13 +1,31 @@
 #include "snowcast_server.h"
 
 int main(int argc, char *argv[]) {
-  if (argc != 2) {
-    fprintf(stderr, "Usage: ./snowcast_server <PORT>\n");
+  if (argc < 3) {
+    fprintf(
+        stderr,
+        "Usage: ./snowcast_server <PORT> <FILE1> [<FILE2> [<FILE3> [...]]]\n");
     exit(1);
   }
 
-  test(argv);
+  int num_stations = argc - 2;
+  station_t *stations[num_stations];
 
+  int listener = get_socket(NULL, argv[1], SOCK_STREAM);
+
+  struct sockaddr_storage from_addr;
+  socklen_t addr_len = sizeof(from_addr);
+  int cfd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
+
+  // TODO: ACCEPT CLIENTS IN A LOOP
+  // -> PUT INTO STATIONS AND POLLING FDs
+  // -> CHECK IF SENDING DATA WORKS
+
+  // free stations
+  for (int i = 0; i < num_stations; i++)
+    destroy_station(stations[i]);
+
+  // test(argv);
   return 0;
 }
 

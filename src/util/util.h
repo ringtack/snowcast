@@ -2,6 +2,7 @@
 #define __UTIL_H__
 
 #include <arpa/inet.h>
+#include <assert.h>
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -75,7 +76,7 @@ void get_addr_str(char ipstr[INET6_ADDRSTRLEN], struct sockaddr *sa);
 void get_address(char buf[], struct sockaddr *sa);
 
 /**
- * Utility function to send all bytes of a value.
+ * Utility function to send all bytes of a value (TCP).
  *
  * Inputs:
  * - int sockfd: the connection socket
@@ -88,7 +89,7 @@ void get_address(char buf[], struct sockaddr *sa);
 int sendall(int sockfd, void *val, int len);
 
 /**
- * Utility function to receive all bytes of a value.
+ * Utility function to receive all bytes of a value (TCP).
  *
  * Inputs:
  * - int sockfd: the connection socket
