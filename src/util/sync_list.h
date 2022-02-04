@@ -21,13 +21,6 @@ typedef struct {
 int sync_list_empty(sync_list_t *sl);
 size_t sync_list_size(sync_list_t *sl);
 
-#define sync_list_empty(sl)                                                    \
-  do {                                                                         \
-    pthread_mutex_lock(&(sl)->mtx);                                            \
-    int empty = list_empty(&(sl)->sync_list);                                  \
-    pthread_mutex_unlock(&(sl)->mtx);                                          \
-  } while (0)
-
 #define sync_list_init(sl)                                                     \
   do {                                                                         \
     list_init(&((sl)->sync_list));                                             \

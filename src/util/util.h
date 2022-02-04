@@ -103,6 +103,22 @@ int sendall(int sockfd, void *val, int len);
 int recvall(int sockfd, void *buf, int len);
 
 /**
+ * Utility function to send all bytes of a value (UDP).
+ *
+ * Inputs:
+ * - int sockfd: the connection socket
+ * - void *val: the value to send
+ * - int len: the size of the value
+ * - struct sockaddr *sa: where we're sending
+ * - socklen_t sa_len: length of the sockaddr
+ *
+ * Returns:
+ * - 0 if success, -1 if failure
+ */
+int sendtoall(int sockfd, void *val, int len, struct sockaddr *sa,
+              socklen_t sa_len);
+
+/**
  * Given a hostname and port, attempts to open a socket.
  *
  * Inputs:

@@ -55,10 +55,32 @@ int sendall(int sockfd, void *val, int len) {
   return 0;
 }
 
+int sendtoall(int sockfd, void *val, int len, struct sockaddr *sa,
+              socklen_t sa_len) {
+  int total = 0;
+  int bytesleft = len;
+  int n;
+  // while bytes sent < total bytes, attempt sending the rest
+  while (total < len) {
+    n = sendto(sockfd, val + total, bytesleft, 0, sa, sa_len);
+    // if an error occurs while sending, return -1
+    if (n == -1) {
+      fprintf(stderr, "[sendtoall] Error while sending bytes to %d.\n", sockfd);
+      return n;
+    }
+    // otherwise, update counts
+    total += n;
+    bytesleft -= n;
+  }
+  return 0;
+}
+
 int recvall(int sockfd, void *buf, int len) {
   // TODO: timeout starting from first attempt vs. restarting on every attempt?
   // Nick said it's ok to estart on every attempt; confirm with Staff later
   // configure socket to timeout on 100ms
+
+  // alternatively, use alarm(2)?
   struct timeval timeout = {0, 100 * 1000};
   if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ==
       -1) {

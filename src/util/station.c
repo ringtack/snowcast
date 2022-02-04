@@ -22,8 +22,9 @@ station_t *init_station(int station_number, char *song_name) {
   station->song_name = strdup(song_name);
   // if duplication of string name fails, return an error
   if (station->song_name == NULL) {
-    fprintf(stderr, "init_station] Not enough memory for song name %s.\n",
+    fprintf(stderr, "[init_station] Not enough memory for song name %s.\n",
             song_name);
+    // clean up previous allocations
     fclose(song_file);
     free(station);
     return NULL;
@@ -38,20 +39,26 @@ station_t *init_station(int station_number, char *song_name) {
 
 void destroy_station(station_t *station) {
   assert(station != NULL);
+
   // destroy every client
   client_connection_t *client;
   sync_list_iterate_begin(&station->client_list, client, client_connection_t,
                           link) {
     destroy_connection(client);
   }
-  // this is just a mutex destroy
+  sync_list_iterate_end(&station->client_list);
+
+  // this is just a mutex destroy; check if valid
   if (sync_list_destroy(&(station->client_list)))
     fprintf(stderr, "failed to destroy station %d's mutex.\n",
             station->station_number);
+
   // free information that was allocated by making a string duplicate
   free(station->song_name);
   if (fclose(station->song_file) != 0)
     perror("destroy_station: fclose");
+
+  // free struct itself
   free(station);
 }
 
@@ -63,25 +70,6 @@ void remove_connection(station_t *station, client_connection_t *conn) {
   sync_list_remove(&station->client_list, &conn->link);
 }
 
-void sendtoall(void *arg) {
-  sta_args_t *args = (sta_args_t *)arg;
-  int total = 0;
-  int bytesleft = args->len;
-  int n;
-  // while bytes sent < total bytes, attempt sending the rest
-  while (total < args->len) {
-    n = sendto(args->sockfd, args->val + total, bytesleft, 0, args->sa,
-               args->sa_len);
-    // if an error occurs while sending, return -1
-    if (n == -1)
-      fprintf(stderr, "[sendtoall] Error while sending bytes to %d.\n",
-              args->sockfd);
-    // otherwise, update counts
-    total += n;
-    bytesleft -= n;
-  }
-}
-
 int read_chunk(station_t *station) {
   assert(station != NULL);
 
@@ -91,7 +79,7 @@ int read_chunk(station_t *station) {
   bytesleft = total = CHUNK_SIZE * sizeof(char);
   while (nbytes < total) {
     // read from file, and update numbytes and bytes left to read
-    ret = fread(station->buf + nbytes, bytesleft, sizeof(char),
+    ret = fread(station->buf + nbytes, sizeof(char), bytesleft,
                 station->song_file);
     nbytes += ret;
     bytesleft -= ret;
@@ -118,43 +106,18 @@ int send_to_connections(station_t *station) {
   assert(station != NULL);
 
   int ret = 0;
-  // lock client list
-  pthread_mutex_lock(&station->client_list.mtx);
-  // get size, and create that many threads
-  size_t size = station->client_list.size;
-  // must create array here, unless I want to malloc every thread (do...while
-  // kills scope)
-  pthread_t ths[size];
-  // iterate through each client connection
+  // concurrently iterate through each client connection
   client_connection_t *it;
-  int i;
-  list_iterate_begin(&station->client_list.sync_list, it, client_connection_t,
-                     link) {
-    // make args struct
-    sta_args_t args = {it->client_fd, station->buf, sizeof(station->buf),
-                       it->addr, it->addr_len};
-    // create thread
-    if (pthread_create(&ths[i++], NULL, (void *(*)(void *))sendtoall, &args)) {
-      ret = -1;
-      fprintf(
-          stderr,
-          "[send_to_connections] Error creating thread for connection %d.\n",
-          it->client_fd);
+  sync_list_iterate_begin(&station->client_list, it, client_connection_t,
+                          link) {
+    if ((ret = sendtoall(it->client_fd, station->buf, sizeof(station->buf),
+                         it->addr, it->addr_len))) {
+      fprintf(stderr,
+              "[send_to_connections] Error sending data to connection %d.\n",
+              it->client_fd);
     }
   }
-  list_iterate_end();
-
-  // join all threads
-  for (int i = 0; i < size; i++) {
-    if (pthread_join(ths[i], NULL)) {
-      ret = -1;
-      fprintf(stderr, "[send_to_connections] Error while joining thread %d.\n",
-              i);
-    }
-  }
-
-  // unlock client list
-  pthread_mutex_unlock(&station->client_list.mtx);
+  sync_list_iterate_end(&station->client_list);
 
   // zero information once done
   memset(station->buf, 0, sizeof(station->buf));
@@ -162,6 +125,7 @@ int send_to_connections(station_t *station) {
   return ret;
 }
 
+// TODO: set up thread cancel signal handler for each station
 void stream_music_loop(void *arg) {
   station_t *station = (station_t *)arg;
 

@@ -23,15 +23,6 @@ typedef struct {
   sync_list_t client_list; // list to store clients connected to this station
 } station_t;
 
-// arg struct for multithreaded sendtoall calls
-typedef struct {
-  int sockfd;
-  void *val;
-  int len;
-  struct sockaddr *sa;
-  socklen_t sa_len;
-} sta_args_t;
-
 /**
  * Initializes a station given a station number and song name.
  *
@@ -71,18 +62,6 @@ void accept_connection(station_t *station, client_connection_t *conn);
  * disconnectingconnection
  */
 void remove_connection(station_t *station, client_connection_t *conn);
-
-/**
- * Utility function to send all bytes of a value (UDP).
- *
- * Inputs (once we cast args):
- * - int sockfd: the connection socket
- * - void *val: the value to send
- * - int len: the size of the value
- * - struct sockaddr *sa: where we're sending
- * - socklen_t *sa_len: length of the sockaddr
- */
-void sendtoall(void *arg);
 
 /**
  * Reads a chunk from the station's song file, where CHUNK_SIZE = 16384 / 16 =
