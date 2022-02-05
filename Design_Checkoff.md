@@ -107,7 +107,7 @@ structure, which prevents any other thread from performing a modification to the
 
 In the future, I'm considering swapping from a single `server_mtx` to a dynamic array of
 `pthread_mutex_t station_mtxs[num_stations]`; this way, we have a finer-grained locking scheme
-that'll allow more threads to modify
+that'll allow more threads to modify stations' client lists at once.
 
 - **[Question]**: Does either implementation actually prevent data races? To my understanding,
   access to each station's client lists is synchronized, but it's also a rather naive and
