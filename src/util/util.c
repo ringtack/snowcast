@@ -45,9 +45,11 @@ int sendall(int sockfd, void *val, int len) {
   // while bytes sent < total bytes, attempt sending the rest
   while (total < len) {
     n = send(sockfd, val + total, bytesleft, 0);
-    // if an error occurs while sending, return -1
-    if (n == -1)
+    // if an error occurs while sending, print error and return -1
+    if (n == -1) {
+      perror("sendall: send");
       return n;
+    }
     // otherwise, update counts
     total += n;
     bytesleft -= n;
@@ -65,7 +67,7 @@ int sendtoall(int sockfd, void *val, int len, struct sockaddr *sa,
     n = sendto(sockfd, val + total, bytesleft, 0, sa, sa_len);
     // if an error occurs while sending, return -1
     if (n == -1) {
-      fprintf(stderr, "[sendtoall] Error while sending bytes to %d.\n", sockfd);
+      perror("sendtoall: sendto");
       return n;
     }
     // otherwise, update counts
@@ -101,7 +103,7 @@ int recvall(int sockfd, void *buf, int len) {
     }
     // display if server disconnected
     if (n == 0) {
-      fprintf(stderr, "Server has disconnected!\n");
+      fprintf(stderr, "Server closed the connection or disconnected!\n");
       return 1;
     }
     // otherwise, update counts
@@ -124,7 +126,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
   // get address info
   int ret;
   if ((ret = getaddrinfo(hostname, port, &hints, &res)) == -1) {
-    fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(ret));
+    fprintf(stderr, "[get_socket] getaddrinfo error: %s\n", gai_strerror(ret));
     return -1;
   }
 
@@ -157,12 +159,13 @@ int get_socket(const char *hostname, const char *port, int socktype) {
         printf("Connected to server %s.\n", buf);
         break;
       }
+      // not an error if fail to connect!
     }
   }
 
   // if no connection works, display error, free address info and exit
   if (r == NULL) {
-    fprintf(stderr, "No available ports on %s!\n", port);
+    fprintf(stderr, "[get_socket] No available ports on %s!\n", port);
     freeaddrinfo(res);
     return -1;
   }
@@ -171,7 +174,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
   if (!hostname) {
     if (socktype == SOCK_STREAM)
       if (listen(sockfd, BACKLOG) == -1) {
-        perror("listen");
+        perror("get_socket: listen");
         freeaddrinfo(res);
         return -1;
       }

@@ -21,9 +21,12 @@
 
 #define BACKLOG 20
 #define MAXBUFSIZ 256
-
-#define POLLFD(new_fd)                                                         \
-  (struct pollfd) { .fd = new_fd, .events = POLLIN }
+#define handle_error_en(en, msg)                                               \
+  do {                                                                         \
+    errno = en;                                                                \
+    perror(msg);                                                               \
+    exit(EXIT_FAILURE);                                                        \
+  } while (0)
 
 /**
  * Prints the error associated with 'errno', and exits.

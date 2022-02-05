@@ -57,6 +57,33 @@ typedef struct __attribute__((packed)) {
 int send_command_msg(int sockfd, uint8_t cmd, uint16_t val);
 
 /**
+ * Receives a command message. YOU MUST FREE THE POINTER WHEN DONE!
+ *
+ * Inputs:
+ * - int sockfd: the connection socket
+ * - uint8_t *reply: a pointer to a command type variable
+ *
+ * Returns:
+ * - a dynamically allocated pointer to the command struct, or NULL on error. If
+ * successful, sets reply to the appropriate type.
+ */
+void *recv_command_msg(int sockfd, uint8_t *reply);
+
+/**
+ * Sends a reply message.
+ *
+ * Inputs:
+ * - int sockfd: the connection socket
+ * - uint8_t cmd: the type of the reply
+ * - uint16_t val: the value of the reply, IN HOST BYTE ORDER
+ * - char *msg: the reply message if applicable, or NULL / empty string
+ *
+ * Returns:
+ * - 0 on success, -1 on error
+ */
+int send_reply_msg(int sockfd, uint8_t cmd, uint16_t val, const char *msg);
+
+/**
  * Receives a reply message. YOU MUST FREE THE POINTER WHEN DONE!
  *
  * Inputs:
@@ -64,8 +91,8 @@ int send_command_msg(int sockfd, uint8_t cmd, uint16_t val);
  * - uint8_t *reply: a pointer to a reply type variable
  *
  * Returns:
- * - a `malloc`'d pointer to the reply struct. In addition, sets reply to the
- * appropriate type.
+ * - a dynamically allocated pointer to the reply struct, or NULL on error. If
+ * successful, sets reply to the appropriate type.
  */
 void *recv_reply_msg(int sockfd, uint8_t *reply);
 

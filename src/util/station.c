@@ -34,6 +34,18 @@ station_t *init_station(int station_number, char *song_name) {
   memset(station->buf, 0, sizeof(station->buf));
   sync_list_init(&(station->client_list));
 
+  // start running streaming thread
+  /* int ret = */
+  /* pthread_create(&station->streamer, NULL, */
+  /* (void *(*)(void *))stream_music_loop, (void *)&station); */
+  /* if (!ret) { */
+  /* // clean up allocations */
+  /* fclose(song_file); */
+  /* free(station->song_name); */
+  /* free(station); */
+  /* handle_error_en(ret, "init_station: pthread_create"); */
+  /* } */
+
   return station;
 }
 
@@ -57,6 +69,14 @@ void destroy_station(station_t *station) {
   free(station->song_name);
   if (fclose(station->song_file) != 0)
     perror("destroy_station: fclose");
+
+  // cancel then join thread [TODO: implement cleanup handler for cancels]
+  int ret = pthread_cancel(station->streamer);
+  if (!ret)
+    handle_error_en(ret, "destroy_station: pthread_cancel");
+  ret = pthread_join(station->streamer, NULL);
+  if (!ret)
+    handle_error_en(ret, "destroy_station: pthread_cancel");
 
   // free struct itself
   free(station);

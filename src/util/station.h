@@ -21,6 +21,7 @@ typedef struct {
   FILE *song_file;         // file to read the song
   char buf[CHUNK_SIZE];    // buffer to store processed song chunks
   sync_list_t client_list; // list to store clients connected to this station
+  pthread_t streamer;      // streamer thread
 } station_t;
 
 /**

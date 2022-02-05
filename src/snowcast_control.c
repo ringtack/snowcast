@@ -8,7 +8,30 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  test(argv);
+  // get server connection
+  int sockfd = get_socket(argv[1], argv[2], SOCK_STREAM);
+  if (sockfd == -1) {
+    fprintf(stderr, "could not connect!\n");
+    exit(1);
+  }
+
+  uint16_t port = atoi(argv[3]);
+  printf("UDP port is %d\n", port);
+  send_command_msg(sockfd, MESSAGE_HELLO, port);
+
+  uint8_t type;
+  void *msg = recv_reply_msg(sockfd, &type);
+  if (type == REPLY_WELCOME) {
+    welcome_t *welcome = (welcome_t *)msg;
+    printf("Welcome to Snowcast! There are %d stations.\n",
+           welcome->num_stations);
+  } else {
+    fprintf(stderr, "Server %s:%s sent an invalid reply!\n", argv[1], argv[2]);
+    // TODO: OTHER CLEANUP
+    exit(1);
+  }
+
+  free(msg);
 
   return 0;
 }
