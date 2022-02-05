@@ -4,29 +4,15 @@
 // fr tho I'll flesh out the stuff I have most components I just need to put
 // stuff together
 
-int main(int argc, char *argv[]) {
-  if (argc < 3) {
-    fprintf(
-        stderr,
-        "Usage: ./snowcast_server <PORT> <FILE1> [<FILE2> [<FILE3> [...]]]\n");
-    exit(1);
-  }
+typedef struct {
+  int listener;
+  int num_stations;
+} accept_args_t;
 
-  // TODO: INITIALIZE SNOWCAST SERVER STRUCT
-  // TODO: INITIALIZE CLIENT CONTROL STRUCT
-  int num_stations = argc - 2;
-  station_t *stations[num_stations];
-  // initialize all stations
-  for (int i = 0; i < num_stations; i++) {
-    char *song_name = argv[i + 2];
-    printf("Station %d is now playing \"%s\".\n", i, song_name);
-    stations[i] = init_station(i, song_name);
-  }
-
-  // open listener socket
-  int listener = get_socket(NULL, argv[1], SOCK_STREAM);
-  if (listener == -1)
-    exit(1); // get_socket handles error printing
+void *accept_client(void *arg) {
+  accept_args_t *args = (accept_args_t *)arg;
+  int listener = args->listener;
+  int num_stations = args->num_stations;
 
   // accept client connection
   struct sockaddr_storage from_addr;
@@ -59,6 +45,39 @@ int main(int argc, char *argv[]) {
 
   printf("Done.\n");
   free(msg);
+
+  return NULL;
+}
+
+int main(int argc, char *argv[]) {
+  if (argc < 3) {
+    fprintf(
+        stderr,
+        "Usage: ./snowcast_server <PORT> <FILE1> [<FILE2> [<FILE3> [...]]]\n");
+    exit(1);
+  }
+
+  // TODO: INITIALIZE SNOWCAST SERVER STRUCT
+  // TODO: INITIALIZE CLIENT CONTROL STRUCT
+  int num_stations = argc - 2;
+  station_t *stations[num_stations];
+  // initialize all stations
+  for (int i = 0; i < num_stations; i++) {
+    char *song_name = argv[i + 2];
+    printf("Station %d is now playing \"%s\".\n", i, song_name);
+    stations[i] = init_station(i, song_name);
+  }
+
+  // open listener socket
+  int listener = get_socket(NULL, argv[1], SOCK_STREAM);
+  if (listener == -1)
+    exit(1); // get_socket handles error printing
+
+  accept_args_t args = {listener, num_stations};
+  pthread_t th;
+  pthread_create(&th, NULL, (void *(*)(void *))accept_client, (void *)&args);
+
+  pthread_join(th, NULL);
   // TODO: ACCEPT CLIENTS IN A LOOP
   // -> PUT INTO STATIONS AND POLLING FDs
   // -> CHECK IF SENDING DATA WORKS
