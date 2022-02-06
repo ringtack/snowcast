@@ -98,9 +98,9 @@ void remove_client(client_vector_t *client_vec, int index);
  *
  * Inputs:
  * - client_vector_t *client_vec: pointer to a vector of client connections
- * - size_t new_max: desired reallocation size
+ * - int new_max: desired reallocation size
  */
-void resize_client_vector(client_vector_t *client_vec, size_t new_max);
+void resize_client_vector(client_vector_t *client_vec, int new_max);
 
 /**
  * Initializes a client connection given a client socket, UDP port, and sockaddr

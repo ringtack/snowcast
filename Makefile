@@ -1,5 +1,5 @@
 CC = gcc
-FLAGS = -Wall -Wextra -pthread -g
+FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3
 
 SRC = src
 UTIL = $(SRC)/util
@@ -12,7 +12,7 @@ EXECS = snowcast_control snowcast_listener snowcast_server
 all: $(EXECS)
 
 $(UTIL)/%.o: $(UTIL)/%.c $(UTIL)/%.h
-	$(CC) $(FLAGS) -c $< 
+	$(CC) $(FLAGS) -c $< -o $@
 
 snowcast_control: $(OBJS) $(SRC)/snowcast_control.c
 	$(CC) $(FLAGS) $^ -o $@

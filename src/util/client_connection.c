@@ -77,7 +77,7 @@ void remove_client(client_vector_t *client_vec, int index) {
   client_vec->size -= 1;
 }
 
-void resize_client_vector(client_vector_t *client_vec, size_t new_max) {
+void resize_client_vector(client_vector_t *client_vec, int new_max) {
   size_t resize = 0;
   // if negative, check if we need to shrink
   if (new_max < 0) {
