@@ -6,27 +6,30 @@ void fatal_error(const char *msg) {
 }
 
 void *get_in_addr(struct sockaddr *sa) {
-  if (sa->sa_family == AF_INET) {
+  if (sa->sa_family == AF_INET)
     return &(((struct sockaddr_in *)sa)->sin_addr);
-  } else {
+  else
     return &(((struct sockaddr_in6 *)sa)->sin6_addr);
-  }
 }
 
-// get port
 unsigned short get_in_port(struct sockaddr *sa) {
-  if (sa->sa_family == AF_INET) {
+  if (sa->sa_family == AF_INET)
     return ntohs(((struct sockaddr_in *)sa)->sin_port);
-  } else {
+  else
     return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
-  }
+}
+
+void set_in_port(struct sockaddr *sa, uint16_t port) {
+  if (sa->sa_family == AF_INET)
+    ((struct sockaddr_in *)sa)->sin_port = htons(port);
+  else
+    ((struct sockaddr_in6 *)sa)->sin6_port = htons(port);
 }
 
 void get_addr_str(char ipstr[INET6_ADDRSTRLEN], struct sockaddr *sa) {
   if (inet_ntop(sa->sa_family, get_in_addr(sa), ipstr, INET6_ADDRSTRLEN) ==
-      NULL) {
+      NULL)
     fatal_error("inet_ntop");
-  }
 }
 
 void get_address(char buf[], struct sockaddr *sa) {

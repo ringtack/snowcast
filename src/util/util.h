@@ -60,6 +60,15 @@ void *get_in_addr(struct sockaddr *sa);
 unsigned short get_in_port(struct sockaddr *sa);
 
 /**
+ * Sets the port of a struct sockaddr, depending on its family.
+ *
+ * Inputs:
+ * - struct sockaddr *sa: the desired struct sockaddr
+ * - uint16_t port: the target port, IN HOST BYTE ORDER
+ */
+void set_in_port(struct sockaddr *sa, uint16_t port);
+
+/**
  * Converts the internet address of a struct sockaddr into a string.
  *
  * Inputs:

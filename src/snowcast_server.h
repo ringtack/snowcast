@@ -3,9 +3,7 @@
 
 #include "./util/protocol.h"
 #include "./util/station.h"
-
-#define POLLFD(new_fd)                                                         \
-  (struct pollfd) { .fd = new_fd, .events = POLLIN }
+#include "./util/thread_pool.h"
 
 /*
  * Central Snowcast Server to receive connections and broadcast songs. The main
@@ -22,30 +20,39 @@
  */
 
 typedef struct {
-  station_t **stations;       // available stations
-  uint16_t num_stations;      // keep track of number of stations
   pthread_mutex_t server_mtx; // synchronize access to server
-  pthread_t server_repl;      // thread to run the server REPL
-  uint8_t stopped; // flag for server condition: 0 -> running, 1 -> stopped
-  // pthread_cond_t server_cond; // condition variable FOR EXTRA FUNCTIONALITY
-  // thread_pool_t th_pool; // [TODO: implement a thread pool]
+  pthread_cond_t server_cond; // condition variable for cleanup
+  thread_pool_t *t_pool;      // thread pool for polling work!
+  uint8_t stopped;            // flag for server condition
 } snowcast_server_t;
 
 /**
+ * Structure to control and modify access to stations.
+ * - Stations will be stored in a dynamically sized array; although a fixed
+ * number of stations are supported, new stations can be easily added if
+ * necessary.
+ *   - TODO: implement add_station, remove_station
+ * - Each station has an associated mutex; this synchronizes access to the
+ * stations list, allowing for the server to swap two clients in a thread-safe
+ * manner.
+ *   - Note that each station's clients are already stored in a synchronized
+ *   doubly-linked list; why do we need another mutex?
+ *      - TODO: good question do I actually need two lol
+ */
+typedef struct {
+  station_t *stations;         // available stations
+  uint16_t num_stations;       // keep track of number of stations
+  pthread_mutex_t station_mtx; // mutex for station control access
+} station_control_t;
+
+/**
  * Structure to control and modify access to client connections.
- *  - Clients are stored in a dynamically sized array; access must be
- * synchronized with the client mutex
- *  - pfds stores struct pollfds to asynchronously wait for incoming requests,
- * then handle each.
  *  - clients_mtx synchronizes access to the structure.
- *
- *  NOTE: `clients` AND `pfds` MUST BE EXACTLY SYNCHRONIZED: INDEX `i` IN
- * `clients` MUST CORRESPOND TO THE APPROPRIATE SOCKET FD IN `pfds`.
  *
  */
 typedef struct {
-  client_connection_t *clients; // currently connected clients
-  struct pollfd *pfds;          // client file descriptors to poll
+  client_conn_vector_t clients; // vector of currently connected clients
+  struct pollfd *pfds;          // vector of client file descriptors to poll
   uint16_t num_clients;         // keep track of number of clients
   uint16_t max_clients;         // record current max size of the array
   pthread_mutex_t clients_mtx;  // synchronize access to client control

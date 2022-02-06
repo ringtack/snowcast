@@ -131,7 +131,7 @@ int send_to_connections(station_t *station) {
   sync_list_iterate_begin(&station->client_list, it, client_connection_t,
                           link) {
     if ((ret = sendtoall(it->client_fd, station->buf, sizeof(station->buf),
-                         it->addr, it->addr_len))) {
+                         it->udp_addr, it->addr_len))) {
       fprintf(stderr,
               "[send_to_connections] Error sending data to connection %d.\n",
               it->client_fd);
@@ -146,6 +146,7 @@ int send_to_connections(station_t *station) {
 }
 
 // TODO: set up thread cancel signal handler for each station
+// TODO: potentially add to thread pool?
 void stream_music_loop(void *arg) {
   station_t *station = (station_t *)arg;
 

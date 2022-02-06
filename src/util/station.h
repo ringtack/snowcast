@@ -13,7 +13,7 @@
 #define CHUNK_SIZE 1024 // note 16384 / 16 = 1024
 #define WAIT_TIME                                                              \
   62500 // microseconds! note 1000000 / 16 = 62500
-        // TODO: shoul I do less (e.g. 60000) to account for loop time?
+        // TODO: should I do less (e.g. 60000) to account for loop time?
 
 typedef struct {
   uint16_t station_number; // unique number for a station
