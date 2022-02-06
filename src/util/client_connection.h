@@ -53,8 +53,11 @@ typedef struct {
  * Inputs:
  * - client_vector_t *client_vec: the client vector to fill
  * - size_t max: the initial max size
+ *
+ * Returns:
+ * - 0 on success, -1 on failure
  */
-void init_client_vector(client_vector_t *client_vec, size_t max);
+int init_client_vector(client_vector_t *client_vec, size_t max);
 
 /**
  * Destroys a client vector. Frees up all dynamically allocated portions inside!

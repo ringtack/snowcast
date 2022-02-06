@@ -18,6 +18,7 @@ station_t *init_station(int station_number, char *song_name) {
     return NULL;
   }
 
+  sync_list_init(&(station->client_list));
   station->station_number = station_number;
   station->song_name = strdup(song_name);
   // if duplication of string name fails, return an error
@@ -30,21 +31,20 @@ station_t *init_station(int station_number, char *song_name) {
     return NULL;
   }
   station->song_file = song_file;
-  // initialize buffer and synchronized list
+  // initialize buffer
   memset(station->buf, 0, sizeof(station->buf));
-  sync_list_init(&(station->client_list));
 
   // start running streaming thread
-  /* int ret = */
-  /* pthread_create(&station->streamer, NULL, */
-  /* (void *(*)(void *))stream_music_loop, (void *)&station); */
-  /* if (!ret) { */
-  /* // clean up allocations */
-  /* fclose(song_file); */
-  /* free(station->song_name); */
-  /* free(station); */
-  /* handle_error_en(ret, "init_station: pthread_create"); */
-  /* } */
+  int ret;
+  if ((ret = pthread_create(&station->streamer, NULL,
+                            (void *(*)(void *))stream_music_loop,
+                            (void *)&station))) {
+    // clean up allocations
+    fclose(song_file);
+    free(station->song_name);
+    free(station);
+    handle_error_en(ret, "init_station: pthread_create");
+  }
 
   return station;
 }

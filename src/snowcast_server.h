@@ -5,6 +5,7 @@
 #include "./util/station.h"
 #include "./util/thread_pool.h"
 
+#define INIT_MAX_CLIENTS 5
 /*
  *  ____                                   _     ____
  * / ___| _ __   _____      _____ __ _ ___| |_  / ___|  ___ _ ____   _____ _ __
@@ -18,18 +19,19 @@
  */
 
 /**
- * A snowcast_server_t represents the server's operations.
- *  - Currently, a fixed number of stations are supported, but can be easily
- *  expanded if necessary.
+ * A server_control_t is responsible for server operations and appropriate
+ * cleanup.
  *  - A thread pool will manage work requests from client connections.
  *  - server_mtx synchronizes access to the server.
+ *  - server_cond allows the server to wait until cleanup is done.
+ *  - Stopped indicates when the server is stopped; 0 -> running, 1 -> stopped.
  */
 typedef struct {
   pthread_mutex_t server_mtx; // synchronize access to server
   pthread_cond_t server_cond; // condition variable for cleanup
   thread_pool_t *t_pool;      // thread pool for polling work!
   uint8_t stopped;            // flag for server condition
-} snowcast_server_t;
+} server_control_t;
 
 /**
  * Structure to control and modify access to stations.
@@ -47,7 +49,8 @@ typedef struct {
  *      - TODO: good question do I actually need two lol
  */
 typedef struct {
-  station_t **station_vec;     // available stations
+  station_t **stations;        // available stations
+  size_t num_stations;         // keeps track of the number of stations
   pthread_mutex_t station_mtx; // mutex for station control access
 } station_control_t;
 
@@ -61,8 +64,67 @@ typedef struct {
 } client_control_t;
 
 /**
- * Testing purposes!
+ * Initializes a server control struct with the specified number of threads in
+ * the thread pool.
+ *
+ * Inputs:
+ * - server_control_t *server_control: the server control struct to initialize
+ * - size_t num_threads: the number of threads in the thread pool
+ *
+ * Returns:
+ * - 0 on success, -1 on failure
  */
-void test(char *argv[]);
+int init_server_control(server_control_t *server_control, size_t num_threads);
+
+/**
+ * Cleans up a server control struct.
+ *
+ * Inputs:
+ * - server_control_t *server_control: the server control struct to clean up
+ */
+void destroy_server_control(server_control_t *server_control);
+
+/**
+ * Initializes a station control struct with the specified number of stations
+ * and a string array of song names.
+ *
+ * Inputs:
+ * - station_control_t *station_control: the station control struct to
+ * initialize
+ * - size_t num_stations: the number of stations
+ * - char *songs[]: the songs corresponding to each station
+ *
+ * Returns:
+ * - 0 on success, -1 on failure
+ */
+int init_station_control(station_control_t *station_control,
+                         size_t num_stations, char *songs[]);
+
+/**
+ * Cleans up a station control struct.
+ *
+ * Inputs:
+ * - station_control_t *station_control: the station control struct to clean up
+ */
+void destroy_station_control(station_control_t *station_control);
+
+/**
+ * Initializes a client control struct.
+ *
+ * Inputs:
+ * - client_control_t *client_control: the client control struct to initialize.
+ *
+ * Returns:
+ * - 0 on success, -1 on failure
+ */
+int init_client_control(client_control_t *client_control);
+
+/**
+ * Cleans up a client control struct.
+ *
+ * Inputs:
+ * - client_control_t *client_control: the client control struct to clean up
+ */
+void destroy_client_control(client_control_t *client_control);
 
 #endif

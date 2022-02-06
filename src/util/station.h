@@ -16,11 +16,11 @@
         // TODO: should I do less (e.g. 60000) to account for loop time?
 
 typedef struct {
+  sync_list_t client_list; // list to store clients connected to this station
   uint16_t station_number; // unique number for a station
   char *song_name;         // name of a song
   FILE *song_file;         // file to read the song
   char buf[CHUNK_SIZE];    // buffer to store processed song chunks
-  sync_list_t client_list; // list to store clients connected to this station
   pthread_t streamer;      // streamer thread
 } station_t;
 

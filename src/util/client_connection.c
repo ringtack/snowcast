@@ -1,23 +1,28 @@
 #include "client_connection.h"
 
-void init_client_vector(client_vector_t *client_vec, size_t max) {
+int init_client_vector(client_vector_t *client_vec, size_t max) {
   // check sanity on max
   assert(max > 0);
 
   // attempt to malloc an initial `max` spaces for connections and pfds
   client_vec->conns = malloc(max * sizeof(client_connection_t));
-  if (client_vec->conns == NULL)
+  if (client_vec->conns == NULL) {
     fprintf(stderr, "[init_client_vector] Failed to malloc client conns.\n");
+    return -1;
+  }
 
   client_vec->pfds = malloc(max * sizeof(struct pollfd));
   if (client_vec->pfds == NULL) {
     fprintf(stderr, "[init_client_vector] Failed to malloc pollfds.\n");
     // clean up
     free(client_vec->conns);
+    return -1;
   }
 
   client_vec->size = 0;
   client_vec->max = max;
+
+  return 0;
 }
 
 void destroy_client_vector(client_vector_t *client_vec) {
