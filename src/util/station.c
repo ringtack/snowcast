@@ -147,7 +147,7 @@ int send_to_connections(station_t *station) {
 
 // TODO: set up thread cancel signal handler for each station
 // TODO: potentially add to thread pool?
-void stream_music_loop(void *arg) {
+void *stream_music_loop(void *arg) {
   station_t *station = (station_t *)arg;
 
   // until something stops us, read from song file, then send to every client
@@ -156,19 +156,21 @@ void stream_music_loop(void *arg) {
   while (1) {
     // read from song file
     if (read_chunk(station)) // an error occurred, so quit
-      return;
+      break;
 
     // send to connections
     if (send_to_connections(station)) {
       // quit on error
       fprintf(stderr, "[stream_music_loop] Refer to error messages above.\n");
-      return;
+      break;
     }
 
     // 1 * 10^6 / 16 = 62500, so we wait for 62500 microseconds
     if (usleep(WAIT_TIME)) {
       perror("stream_music_loop: usleep");
-      return;
+      break;
     }
   }
+
+  return NULL;
 }

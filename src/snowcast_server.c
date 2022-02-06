@@ -8,37 +8,41 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  // Initialize client, server, and station control structs
-
-  // TODO: INITIALIZE SNOWCAST SERVER STRUCT
-  // TODO: INITIALIZE CLIENT CONTROL STRUCT
-  int num_stations = argc - 2;
-  station_t *stations[num_stations];
-  // initialize all stations
-  for (int i = 0; i < num_stations; i++) {
-    char *song_name = argv[i + 2];
-    printf("Station %d is now playing \"%s\".\n", i, song_name);
-    stations[i] = init_station(i, song_name);
-  }
-
+  //// INITIALIZATION ////
   // open listener socket
   int listener = get_socket(NULL, argv[1], SOCK_STREAM);
   if (listener == -1)
     exit(1); // get_socket handles error printing
 
-  accept_args_t args = {listener, num_stations};
-  pthread_t th;
-  pthread_create(&th, NULL, (void *(*)(void *))accept_client, (void *)&args);
+  int ret;
+  // Initialize client, server, and station control structs
+  // clean up everything on failure
+  // TODO: do I actually need the destroy_struct... calls? so tedious........
+  server_control_t server_control;
+  if ((ret = init_server_control(&server_control, INIT_NUM_THREADS))) {
+    close(listener);
+    exit(1);
+  }
 
-  pthread_join(th, NULL);
+  station_control_t station_control;
+  size_t num_stations = argc - 2;
+  char **songs = argv + 2;
+  if ((ret = init_station_control(&station_control, num_stations, songs))) {
+    close(listener);
+    exit(1);
+  }
+
+  client_control_t client_control;
+  if ((ret = init_client_control(&client_control))) {
+    close(listener);
+    exit(1);
+  }
+
   // TODO: ACCEPT CLIENTS IN A LOOP
   // -> PUT INTO STATIONS AND POLLING FDs
   // -> CHECK IF SENDING DATA WORKS
 
   //// CLEANUP ////
-  // free stations
-  for (int i = 0; i < num_stations; i++)
-    destroy_station(stations[i]);
 
   // TODO: DESTROY SNOWCAST SERVER STRUCT
   // TODO: DESTROY CLIENT CONTROL STRUCT

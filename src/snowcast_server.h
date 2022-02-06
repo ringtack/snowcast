@@ -6,6 +6,7 @@
 #include "./util/thread_pool.h"
 
 #define INIT_MAX_CLIENTS 5
+#define INIT_NUM_THREADS 16
 /*
  *  ____                                   _     ____
  * / ___| _ __   _____      _____ __ _ ___| |_  / ___|  ___ _ ____   _____ _ __
@@ -22,14 +23,14 @@
  * A server_control_t is responsible for server operations and appropriate
  * cleanup.
  *  - A thread pool will manage work requests from client connections.
- *  - server_mtx synchronizes access to the server.
+ *  - server_mtx synchronizes access to the server. Only necessary for stopped.
  *  - server_cond allows the server to wait until cleanup is done.
- *  - Stopped indicates when the server is stopped; 0 -> running, 1 -> stopped.
+ *  - stopped indicates when the server is stopped; 0 -> running, 1 -> stopped.
  */
 typedef struct {
+  thread_pool_t *t_pool;      // thread pool for polling work!
   pthread_mutex_t server_mtx; // synchronize access to server
   pthread_cond_t server_cond; // condition variable for cleanup
-  thread_pool_t *t_pool;      // thread pool for polling work!
   uint8_t stopped;            // flag for server condition
 } server_control_t;
 

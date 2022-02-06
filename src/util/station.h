@@ -94,7 +94,10 @@ int send_to_connections(station_t *station);
  *
  * Inputs (once we cast args to station_t *):
  * - station_t *station: the station to run on a thread
+ *
+ * Returns:
+ * - NULL
  */
-void stream_music_loop(void *arg);
+void *stream_music_loop(void *arg);
 
 #endif
