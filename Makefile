@@ -11,7 +11,7 @@ EXECS = snowcast_control snowcast_listener snowcast_server
 
 all: $(EXECS)
 
-%.o: $(UTIL)/%.c $(UTIL)/%.h
+$(UTIL)/%.o: $(UTIL)/%.c $(UTIL)/%.h
 	$(CC) $(FLAGS) -c $< 
 
 snowcast_control: $(OBJS) $(SRC)/snowcast_control.c

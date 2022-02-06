@@ -30,8 +30,8 @@ void destroy_client_vector(client_vector_t *client_vec) {
   free(client_vec->pfds);
 }
 
-int add_connection(client_vector_t *client_vec, int client_fd,
-                   uint16_t udp_port, struct sockaddr *sa, socklen_t sa_len) {
+int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
+               struct sockaddr *sa, socklen_t sa_len) {
   // check if we need more space
   if (client_vec->size == client_vec->max) {
     size_t new_max = (client_vec->max *= 2);
@@ -68,7 +68,7 @@ int add_connection(client_vector_t *client_vec, int client_fd,
   return 0;
 }
 
-void remove_connection(client_vector_t *client_vec, int index) {
+void remove_client(client_vector_t *client_vec, int index) {
   // override current client with last client, then reduce count
   int size = client_vec->size;
   client_vec->conns[index] = client_vec->conns[size - 1];
@@ -77,22 +77,33 @@ void remove_connection(client_vector_t *client_vec, int index) {
   client_vec->size -= 1;
 }
 
-void resize_client_vector(client_vector_t *client_vec) {
-  // if sufficiently small, try to resize
-  if (client_vec->size < (client_vec->max / 2)) {
-    size_t new_max = (client_vec->max /= 2);
+void resize_client_vector(client_vector_t *client_vec, size_t new_max) {
+  size_t resize = 0;
+  // if negative, check if we need to shrink
+  if (new_max < 0) {
+    // if sufficiently small, try to resize
+    if (client_vec->size < (client_vec->max / 2))
+      resize = client_vec->max / 2;
+  } else {
+    // if positive, check if new max satisfies constraints
+    assert(new_max >= client_vec->size);
+    resize = new_max;
+  }
 
-    // attempt to shrink conns and pfds
+  // only resize if possible (i.e. resize != 0)
+  if (resize) {
+    // attempt to reallocate space for connections and pfds
     client_connection_t *new_conns =
-        realloc(client_vec->conns, new_max * sizeof(*client_vec->conns));
+        realloc(client_vec->conns, resize * sizeof(*client_vec->conns));
     struct pollfd *new_pfds =
-        realloc(client_vec->pfds, new_max * sizeof(*client_vec->pfds));
+        realloc(client_vec->pfds, resize * sizeof(*client_vec->pfds));
 
-    // if either fails, restore back to old value; otherwise, set new values
+    // if either fails, don't update; otherwise, set new values
     if ((new_conns == NULL) || (new_pfds == NULL)) {
-      fprintf(stderr, "Failed to realloc client conns. Restoring max...\n");
-      client_vec->max *= 2;
+      fprintf(stderr,
+              "[resize_client_vector] Failed to realloc client conns/pfds.\n");
     } else {
+      client_vec->max = resize;
       client_vec->conns = new_conns;
       client_vec->pfds = new_pfds;
     }

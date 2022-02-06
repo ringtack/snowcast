@@ -6,19 +6,24 @@
 #include "./util/thread_pool.h"
 
 /*
+ *  ____                                   _     ____
+ * / ___| _ __   _____      _____ __ _ ___| |_  / ___|  ___ _ ____   _____ _ __
+ * \___ \| '_ \ / _ \ \ /\ / / __/ _` / __| __| \___ \ / _ \ '__\ \ / / _ \ '__|
+ *  ___) | | | | (_) \ V  V / (_| (_| \__ \ |_   ___) |  __/ |   \ V /  __/ |
+ * |____/|_| |_|\___/ \_/\_/ \___\__,_|___/\__| |____/ \___|_|    \_/ \___|_|
+ *
  * Central Snowcast Server to receive connections and broadcast songs. The main
  * thread will be responsible for handling REPL commands, and thread cleanup if
  * necessary.
- *
- * A snowcast_server_t represents the server's operations.
- *  - Currently, a fixed number of stations are supported, but can be easily
- * expanded if necessary.
- *  - A thread manages the server REPL, which updates `stopped` upon request.
- *  - A thread pool will manage work requests from client connections.
- *  - server_mtx synchronizes access to the server.
- *
  */
 
+/**
+ * A snowcast_server_t represents the server's operations.
+ *  - Currently, a fixed number of stations are supported, but can be easily
+ *  expanded if necessary.
+ *  - A thread pool will manage work requests from client connections.
+ *  - server_mtx synchronizes access to the server.
+ */
 typedef struct {
   pthread_mutex_t server_mtx; // synchronize access to server
   pthread_cond_t server_cond; // condition variable for cleanup
@@ -31,7 +36,9 @@ typedef struct {
  * - Stations will be stored in a dynamically sized array; although a fixed
  * number of stations are supported, new stations can be easily added if
  * necessary.
+ *   - TODO: implement station_vector_t
  *   - TODO: implement add_station, remove_station
+ *
  * - Each station has an associated mutex; this synchronizes access to the
  * stations list, allowing for the server to swap two clients in a thread-safe
  * manner.
@@ -40,26 +47,18 @@ typedef struct {
  *      - TODO: good question do I actually need two lol
  */
 typedef struct {
-  station_t *stations;         // available stations
-  uint16_t num_stations;       // keep track of number of stations
+  station_t **station_vec;     // available stations
   pthread_mutex_t station_mtx; // mutex for station control access
 } station_control_t;
 
 /**
- * Structure to control and modify access to client connections.
- *  - clients_mtx synchronizes access to the structure.
- *
+ * Structure to control and modify access to client connections. Provides a
+ * lightweight synchronization wrapper.
  */
 typedef struct {
-  client_conn_vector_t clients; // vector of currently connected clients
-  struct pollfd *pfds;          // vector of client file descriptors to poll
-  uint16_t num_clients;         // keep track of number of clients
-  uint16_t max_clients;         // record current max size of the array
-  pthread_mutex_t clients_mtx;  // synchronize access to client control
+  client_vector_t client_vec;  // vector of currently connected clients
+  pthread_mutex_t clients_mtx; // synchronize access to client control
 } client_control_t;
-
-// TODO: INIT_SNOWCAST_SERVER, DESTROY_SNOWCAST_SERVER
-// TODO: INIT_CLIENT_CONTROL, DESTROY_CLIENT_CONTROL
 
 /**
  * Testing purposes!

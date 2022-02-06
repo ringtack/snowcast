@@ -77,8 +77,8 @@ void destroy_client_vector(client_vector_t *client_vec);
  * Returns:
  * - 0 on success, -1 on failure
  */
-int add_connection(client_vector_t *client_vec, int client_fd,
-                   uint16_t udp_port, struct sockaddr *sa, socklen_t sa_len);
+int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
+               struct sockaddr *sa, socklen_t sa_len);
 
 /**
  * Removes a client connection from a vector of client connections. DOES NOT
@@ -89,15 +89,18 @@ int add_connection(client_vector_t *client_vec, int client_fd,
  * - client_vector_t *client_vec: pointer to a vector of client connections
  * - int index: index of client to delete
  */
-void remove_connection(client_vector_t *client_vec, int index);
+void remove_client(client_vector_t *client_vec, int index);
 
 /**
- * Resizes the client vector if appropriate (size < max / 2).
+ * Resizes the client vector:
+ *  - if positive, must have new_max >= size
+ *  - if negative, shrinks if appropriate i.e. size < max / 2.
  *
  * Inputs:
  * - client_vector_t *client_vec: pointer to a vector of client connections
+ * - size_t new_max: desired reallocation size
  */
-void resize_client_vector(client_vector_t *client_vec);
+void resize_client_vector(client_vector_t *client_vec, size_t new_max);
 
 /**
  * Initializes a client connection given a client socket, UDP port, and sockaddr
