@@ -27,6 +27,7 @@ typedef struct {
   struct sockaddr *tcp_addr; // TCP address
   struct sockaddr *udp_addr; // UDP address
   socklen_t addr_len;        // length of address; only difference is port
+  uint16_t udp_port;         // store UDP port
 } client_connection_t;
 
 /**
@@ -73,7 +74,8 @@ void destroy_client_vector(client_vector_t *client_vec);
  * Inputs:
  * - client_vector_t *client_vec: pointer to a vector of client connections
  * - int client_fd: the client's socket file descriptor
- * - uint16_t udp_port: the UDP port of the client's listener
+ * - uint16_t udp_port: the UDP port of the client's listener. If zero, we must
+ * fill in later!
  * - struct sockaddr *sa: the client's socket address
  * - socklen_t sa_len: the length of the client's socket address
  *
@@ -102,16 +104,20 @@ void remove_client(client_vector_t *client_vec, int index);
  * Inputs:
  * - client_vector_t *client_vec: pointer to a vector of client connections
  * - int new_max: desired reallocation size
+ *
+ * Returns:
+ * - 0 on success, -1 on failure
  */
-void resize_client_vector(client_vector_t *client_vec, int new_max);
+int resize_client_vector(client_vector_t *client_vec, int new_max);
 
 /**
- * Initializes a client connection given a client socket, UDP port, and sockaddr
+ * Initializes a client connection given a client socket, (optionally) UDP port,
+ * and sockaddr
  *
  * Inputs:
  * - client_connection_t *conn: the connection to initialize
  * - int client_fd: the client's socket file descriptor
- * - uint16_t udp_port: the UDP port of the client's listener
+ * - uint16_t udp_port: the UDP port of the client's listener.
  * - struct sockaddr *sa: the client's socket address
  * - socklen_t sa_len: the length of the client's socket address
  *
@@ -120,6 +126,14 @@ void resize_client_vector(client_vector_t *client_vec, int new_max);
  */
 int init_connection(client_connection_t *conn, int client_fd, uint16_t udp_port,
                     struct sockaddr *sa, socklen_t sa_len);
+
+/**
+ * Update a client connection's port.
+ *
+ * Inputs:
+ * - uint16_t udp_port: the UDP port of the client's listener.
+ */
+void update_conn_port(client_connection_t *conn, uint16_t udp_port);
 
 /**
  * Destroys a dynamically initialized connection, closing the client file
@@ -131,14 +145,3 @@ int init_connection(client_connection_t *conn, int client_fd, uint16_t udp_port,
 void destroy_connection(client_connection_t *conn);
 
 #endif
-
-// lol jk i don't need this anymore
-// keeping it for the nice banner tho
-/* ===============================================================================
- *                           OLD HELPER FUNCTIONS
- * ===============================================================================
- * Once upon a time, these were useful; however, when making a dynamically sized
- * array of dynamically allocated client connections, I didn't really want to
- * work with a triple pointer situation. Thus, I encapsulated a client
- * connection with its corresponding pollfd into a vector. See above!
- */

@@ -38,6 +38,7 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  printf("Hi\n");
   // TODO: ACCEPT CLIENTS IN A LOOP
   // -> PUT INTO STATIONS AND POLLING FDs
   // -> CHECK IF SENDING DATA WORKS
@@ -156,9 +157,12 @@ int init_client_control(client_control_t *client_control) {
   int ret = init_client_vector(&client_control->client_vec, INIT_MAX_CLIENTS);
   if (ret)
     return -1;
-  if ((ret = pthread_mutex_init(&client_control->clients_mtx, NULL))) {
+
+  client_control->num_pending = 0;
+  if ((ret = pthread_mutex_init(&client_control->clients_mtx, NULL) ||
+             pthread_cond_init(&client_control->pending_cond, NULL))) {
     // TODO: print better output
-    fprintf(stderr, "[init_station_control] Failed to init mutex.\n");
+    fprintf(stderr, "[init_station_control] Failed to init cv/mutex.\n");
     destroy_client_vector(&client_control->client_vec);
     return -1;
   }
@@ -168,10 +172,11 @@ int init_client_control(client_control_t *client_control) {
 
 void destroy_client_control(client_control_t *client_control) {
   destroy_client_vector(&client_control->client_vec);
-  int ret = pthread_mutex_destroy(&client_control->clients_mtx);
-  if (ret) {
+
+  if (pthread_mutex_destroy(&client_control->clients_mtx) ||
+      pthread_cond_destroy(&client_control->pending_cond)) {
     // TODO: print better output
-    fprintf(stderr, "[destroy_station_control] Failed to destroy mutex.\n");
+    fprintf(stderr, "[destroy_station_control] Failed to destroy cv/mutex.\n");
   }
 }
 

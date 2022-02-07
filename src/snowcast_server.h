@@ -1,9 +1,9 @@
 #ifndef __SNOWCAST_SERVER__
 #define __SNOWCAST_SERVER__
 
-#include "./util/protocol.h"
-#include "./util/station.h"
-#include "./util/thread_pool.h"
+#include "util/protocol.h"
+#include "util/station.h"
+#include "util/thread_pool.h"
 
 #define INIT_MAX_CLIENTS 5
 #define INIT_NUM_THREADS 16
@@ -48,6 +48,10 @@ typedef struct {
  *   - Note that each station's clients are already stored in a synchronized
  *   doubly-linked list; why do we need another mutex?
  *      - TODO: good question do I actually need two lol
+ *
+ * - So I think `station_mtx` is necessary only for the number of stations
+ * (`stations` already has synchronization primitives, until we implement adding
+ * stations.)
  */
 typedef struct {
   station_t **stations;        // available stations
@@ -58,10 +62,19 @@ typedef struct {
 /**
  * Structure to control and modify access to client connections. Provides a
  * lightweight synchronization wrapper.
+ * - Note that unless we want potentially messy signal handling, we need some
+ * way of ensuring that the `pfds` in `client_vec` are not tampered with in the
+ * middle of a `poll` call. To that end, we lock the client control struct until
+ * poll returns. This, of course, may pose problems if we wish to modify the
+ * client control struct in a timely manner; thus, we wait until all
+ * modifications to the client control struct is done.
  */
 typedef struct {
   client_vector_t client_vec;  // vector of currently connected clients
+  size_t num_pending;          // record number of ops that change client_vec
   pthread_mutex_t clients_mtx; // synchronize access to client control
+  pthread_cond_t pending_cond; // wait until no more pending
+  // TODO: implement a signal handler
 } client_control_t;
 
 /**

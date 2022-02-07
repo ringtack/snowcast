@@ -37,31 +37,17 @@ void destroy_client_vector(client_vector_t *client_vec) {
 
 int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
                struct sockaddr *sa, socklen_t sa_len) {
+  int ret;
   // check if we need more space
   if (client_vec->size == client_vec->max) {
-    size_t new_max = (client_vec->max *= 2);
-
-    // attempt to allocate more space for connections and pfds
-    client_connection_t *new_conns =
-        realloc(client_vec->conns, new_max * sizeof(*client_vec->conns));
-    struct pollfd *new_pfds =
-        realloc(client_vec->pfds, new_max * sizeof(*client_vec->pfds));
-
-    // if either fails, restore back to old value; otherwise, set new values
-    if ((new_conns == NULL) || (new_pfds == NULL)) {
-      fprintf(stderr, "Failed to grow client conns/pfds. Restoring max...\n");
-      client_vec->max /= 2;
+    // attempt to resize; if fail, indicate
+    if ((ret = resize_client_vector(client_vec, 2 * client_vec->max)) != 0)
       return -1;
-    } else {
-      client_vec->conns = new_conns;
-      client_vec->pfds = new_pfds;
-    }
   }
 
   size_t i = client_vec->size;
   // attempt to initialize a connection
-  int ret =
-      init_connection(&client_vec->conns[i], client_fd, udp_port, sa, sa_len);
+  ret = init_connection(&client_vec->conns[i], client_fd, udp_port, sa, sa_len);
   if (ret == -1) {
     return -1;
   }
@@ -82,16 +68,22 @@ void remove_client(client_vector_t *client_vec, int index) {
   client_vec->size -= 1;
 }
 
-void resize_client_vector(client_vector_t *client_vec, int new_max) {
+int resize_client_vector(client_vector_t *client_vec, int new_max) {
   size_t resize = 0;
   // if negative, check if we need to shrink
   if (new_max < 0) {
-    // if sufficiently small, try to resize
+    // if sufficiently small, try to half
     if (client_vec->size < (client_vec->max / 2))
       resize = client_vec->max / 2;
   } else {
     // if positive, check if new max satisfies constraints
     assert(new_max >= client_vec->size);
+    if (new_max < client_vec->size) {
+      fprintf(
+          stderr,
+          "[resize_client_vector] Max must be larger than the current size.\n");
+      return -1;
+    }
     resize = new_max;
   }
 
@@ -107,12 +99,15 @@ void resize_client_vector(client_vector_t *client_vec, int new_max) {
     if ((new_conns == NULL) || (new_pfds == NULL)) {
       fprintf(stderr,
               "[resize_client_vector] Failed to realloc client conns/pfds.\n");
+      return -1;
     } else {
       client_vec->max = resize;
       client_vec->conns = new_conns;
       client_vec->pfds = new_pfds;
     }
   }
+
+  return 0;
 }
 
 int init_connection(client_connection_t *conn, int client_fd, uint16_t udp_port,
@@ -142,12 +137,19 @@ int init_connection(client_connection_t *conn, int client_fd, uint16_t udp_port,
     return -1;
   }
   memcpy(conn->udp_addr, sa, sa_len);
-  set_in_port(conn->udp_addr, udp_port);
+  if (udp_port)
+    set_in_port(conn->udp_addr, udp_port);
 
   // same length for both addresses
   conn->addr_len = sa_len;
+  conn->udp_port = udp_port;
 
   return 0;
+}
+
+void update_conn_port(client_connection_t *conn, uint16_t udp_port) {
+  set_in_port(conn->udp_addr, udp_port);
+  conn->udp_port = udp_port;
 }
 
 void destroy_connection(client_connection_t *conn) {
