@@ -6,12 +6,16 @@ int send_command_msg(int sockfd, uint8_t cmd, uint16_t val) {
   if (cmd == MESSAGE_HELLO) {
     hello_t msg = {cmd, val};
     int len = sizeof(msg);
-    if (sendall(sockfd, &msg, len))
+    if (sendall(sockfd, &msg, len)) {
+      fprintf(stderr, "[send_command_msg] Refer to error messages above.\n");
       return -1;
+    }
   } else if (cmd == MESSAGE_SET_STATION) {
     set_station_t msg = {cmd, val};
-    if (sendall(sockfd, &msg, sizeof(msg)))
+    if (sendall(sockfd, &msg, sizeof(msg))) {
+      fprintf(stderr, "[send_command_msg] Refer to error messages above.\n");
       return -1;
+    }
   } else {
     // currently, only supports Hello and SetStation
     fprintf(stderr, "Invalid command type [%d]!\n", cmd);
@@ -32,6 +36,7 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
   int ret = recvall(sockfd, reply, sizeof(*reply));
   if (ret != 0) {
     *res = ret;
+    fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
     return NULL;
   }
 
@@ -40,23 +45,25 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
     uint16_t udp_port;
     if ((ret = recvall(sockfd, &udp_port, sizeof(udp_port))) != 0) {
       *res = ret;
+      fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
       return NULL;
     }
     // create dynamic pointer to Welcome message, and set values
     hello_t *hello = malloc(sizeof(hello_t));
     hello->command_type = *reply;
-    hello->udp_port = udp_port;
+    hello->udp_port = ntohs(udp_port);
     return hello;
   } else if (*reply == MESSAGE_SET_STATION) {
     // if Set Station, read in two bytes for the desired station
     uint16_t station_number;
     if ((ret = recvall(sockfd, &station_number, sizeof(station_number))) != 0) {
       *res = ret;
+      fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
       return NULL;
     }
     set_station_t *set_station = malloc(sizeof(set_station_t));
     set_station->command_type = *reply;
-    set_station->station_number = station_number;
+    set_station->station_number = ntohs(station_number);
     return set_station;
   } else {
     // Otherwise, not a valid message, so indicate as such
@@ -69,21 +76,25 @@ int send_reply_msg(int sockfd, uint8_t cmd, uint16_t val, const char *msg) {
   if (cmd == REPLY_WELCOME) {
     welcome_t welcome = {cmd, htons(val)};
     int len = sizeof(welcome);
-    if (sendall(sockfd, &welcome, len))
+    if (sendall(sockfd, &welcome, len)) {
+      fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
       return -1;
+    }
   } else if (cmd == REPLY_ANNOUNCE || cmd == REPLY_INVALID) {
     // since they're the same structure, we follow the same procedures for both.
     // TODO: change if we want to adjust spec
-    size_t size = sizeof(announce_t) + strlen(msg);
+    uint8_t str_size = (uint8_t)val;
+    size_t size = sizeof(announce_t) + str_size * sizeof(char);
     announce_t *announce = malloc(size);
     if (announce == NULL) {
       fprintf(stderr, "[send_reply_msg] Could not malloc command %d.\n", cmd);
       return -1;
     }
     announce->reply_type = cmd;
-    announce->songname_size = htons((uint8_t)val);
-    memcpy(announce->songname, msg, strlen(msg));
+    announce->songname_size = str_size;
+    memcpy(announce->songname, msg, str_size);
     if (sendall(sockfd, announce, size)) {
+      fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
       free(announce);
       return -1;
     }
@@ -97,15 +108,19 @@ int send_reply_msg(int sockfd, uint8_t cmd, uint16_t val, const char *msg) {
 
 void *recv_reply_msg(int sockfd, uint8_t *reply) {
   // read in reply type; only 1 byte
-  if (recvall(sockfd, reply, sizeof(*reply)) == -1)
+  if (recvall(sockfd, reply, sizeof(*reply)) == -1) {
+    fprintf(stderr, "[recv_reply_msg] Refer to error messages above.\n");
     return NULL;
+  }
 
   uint8_t size;
   if (*reply == REPLY_WELCOME) {
     // if Welcome, read in two bytes for number of stations
     uint16_t num_stations;
-    if (recvall(sockfd, &num_stations, sizeof(num_stations)) == -1)
+    if (recvall(sockfd, &num_stations, sizeof(num_stations)) == -1) {
+      fprintf(stderr, "[recv_reply_msg] Refer to error messages above.\n");
       return NULL;
+    }
     // create dynamic pointer to Welcome message, and set values
     welcome_t *welcome = malloc(sizeof(welcome_t));
     welcome->reply_type = *reply;
@@ -114,12 +129,14 @@ void *recv_reply_msg(int sockfd, uint8_t *reply) {
   } else if (*reply == REPLY_ANNOUNCE || *reply == REPLY_INVALID) {
     // if Announce or Invalid, read in size of string
     if (recvall(sockfd, &size, sizeof(size)) == -1) {
+      fprintf(stderr, "[recv_reply_msg] Refer to error messages above.\n");
       return NULL;
     }
 
     // Then, read in contents of string
     char msg[size];
     if (recvall(sockfd, msg, size * sizeof(char)) == -1) {
+      fprintf(stderr, "[recv_reply_msg] Refer to error messages above.\n");
       return NULL;
     }
     // create dynamic pointers and initialize values

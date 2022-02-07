@@ -12,7 +12,7 @@ FILES = $(wildcard src/*.c src/*.h)
 EXECS = snowcast_control snowcast_listener snowcast_server
 
 # Include util folders!
-FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL) -fsanitize=address
+FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL) -O0
 
 # Pretty printing
 TOILET = toilet -f term -F border:metal

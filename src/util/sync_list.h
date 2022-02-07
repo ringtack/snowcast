@@ -33,7 +33,7 @@ size_t sync_list_size(sync_list_t *sl);
 #define sync_list_insert_head(sl, link)                                        \
   do {                                                                         \
     pthread_mutex_lock(&(sl)->mtx);                                            \
-    list_insert_head(&(sl)->sync_list, link);                                  \
+    list_insert_head(&(sl)->sync_list, (link));                                \
     (sl)->size += 1;                                                           \
     pthread_mutex_unlock(&(sl)->mtx);                                          \
   } while (0)
@@ -41,7 +41,7 @@ size_t sync_list_size(sync_list_t *sl);
 #define sync_list_insert_tail(sl, link)                                        \
   do {                                                                         \
     pthread_mutex_lock(&(sl)->mtx);                                            \
-    list_insert_tail(&(sl)->sync_list, link);                                  \
+    list_insert_tail(&(sl)->sync_list, (link));                                \
     (sl)->size += 1;                                                           \
     pthread_mutex_unlock(&(sl)->mtx);                                          \
   } while (0)
@@ -49,7 +49,7 @@ size_t sync_list_size(sync_list_t *sl);
 #define sync_list_remove(sl, link)                                             \
   do {                                                                         \
     pthread_mutex_lock(&(sl)->mtx);                                            \
-    list_remove(link);                                                         \
+    list_remove((link));                                                       \
     (sl)->size -= 1;                                                           \
     pthread_mutex_unlock(&(sl)->mtx);                                          \
   } while (0)

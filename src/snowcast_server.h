@@ -1,11 +1,12 @@
 #ifndef __SNOWCAST_SERVER__
 #define __SNOWCAST_SERVER__
 
+#include "util/client_vector.h"
 #include "util/protocol.h"
 #include "util/station.h"
 #include "util/thread_pool.h"
 
-#define INIT_MAX_CLIENTS 5
+#define INIT_MAX_CLIENTS 8
 #define INIT_NUM_THREADS 16
 
 #define MAXADDRLEN 64

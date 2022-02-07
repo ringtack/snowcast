@@ -300,6 +300,7 @@ void swap_stations(station_control_t *sc, client_connection_t *conn,
   int old_station = conn->current_station;
   // if not currently in a station, join that one
   if (old_station == -1) {
+    conn->current_station = new_station;
     accept_connection(sc->stations[new_station], conn);
   } else if (old_station != new_station) {
     int lower_station = old_station < new_station ? old_station : new_station;
@@ -308,6 +309,7 @@ void swap_stations(station_control_t *sc, client_connection_t *conn,
     pthread_mutex_lock(&sc->stations[lower_station]->client_list.mtx);
     pthread_mutex_lock(&sc->stations[higher_station]->client_list.mtx);
 
+    conn->current_station = new_station;
     // remove from old station, then add to new
     remove_connection(sc->stations[old_station], conn);
     accept_connection(sc->stations[new_station], conn);
@@ -339,10 +341,13 @@ void process_connection(void *arg) {
   client_fd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
   if (client_fd == -1) {
     // if errors, exit function prematurely
-    perror("process_connection: accept");
+    perror("[process_connection] accept");
     return;
   }
+
   get_address(address, (struct sockaddr *)&from_addr);
+  printf("Received client connection from %s.\n", address);
+  printf("Awaiting a Hello... ");
 
   // wait for a response; this times out after 100ms, so if client still doesn't
   // send HELLO, they get disconnected.
@@ -352,7 +357,8 @@ void process_connection(void *arg) {
   // if NULL, an error occurred while recving, close the connection
   if (msg == NULL) {
     fprintf(stderr,
-            "Failed to receive message from client %s. Closing connection...\n",
+            "[process_connection] Failed to receive message from client %s. "
+            "Closing connection...\n",
             address);
     close(client_fd);
     return;
@@ -370,6 +376,8 @@ void process_connection(void *arg) {
   uint16_t udp_port = ((hello_t *)msg)->udp_port;
   free(msg);
 
+  printf("Received Hello!\nSending Welcome... ");
+
   // get num stations
   pthread_mutex_lock(&station_control.station_mtx);
   size_t num_stations = station_control.num_stations;
@@ -383,15 +391,20 @@ void process_connection(void *arg) {
     int index;
     if ((index = add_client(&client_control.client_vec, client_fd, udp_port,
                             (struct sockaddr *)&from_addr, addr_len)) == -1) {
+      printf("Closing client fd: %d\n", client_fd);
       close(client_fd);
       break;
     }
     // send "Welcome" reply message; if fails, close stuff
-    if (send_reply_msg(client_fd, MESSAGE_HELLO, num_stations, NULL)) {
+    if (send_reply_msg(client_fd, REPLY_WELCOME, num_stations, NULL)) {
+      fprintf(stderr, "Failed to send Welcome. Closing connection.\n");
       remove_client(&client_control.client_vec, index);
       break;
     }
   } while (0);
+
+  printf("Done!\n");
+
   // unlock; if we're the last pending operation, signal to cv
   if (--client_control.num_pending == 0)
     pthread_cond_signal(&client_control.pending_cond);
@@ -413,12 +426,14 @@ void *poll_connections(void *arg) {
     pthread_mutex_lock(&client_control.clients_mtx);
     pthread_cleanup_push(pthread_unlock_cleanup_handler,
                          &client_control.clients_mtx);
-    while (client_control.num_pending > 0)
+    while (client_control.num_pending > 0) {
+      printf("Waiting...\n");
       pthread_cond_wait(&client_control.pending_cond,
                         &client_control.clients_mtx);
+    }
 
     // check to resize
-    resize_client_vector(&client_control.client_vec, -1);
+    /* resize_client_vector(&client_control.client_vec, -1); */
 
     // once it's safe to attempt, poll indefinitely until a request/connection
     //
@@ -428,7 +443,11 @@ void *poll_connections(void *arg) {
     // function are waiting, we can synchronously poll.]
     num_fds = client_control.client_vec.size + 1;
     pfds = client_control.client_vec.pfds;
+
+    num_events = 0;
     num_events = poll(pfds, num_fds, -1);
+
+    printf("Finished polling.\n");
 
     // once we're done polling, we can unlock the mutex
     pthread_cleanup_pop(1);
@@ -449,6 +468,8 @@ void *poll_connections(void *arg) {
     // loop through all client connections
     // TODO: handle synchronously removing connections
     for (size_t i = 1; i < num_fds; i++) {
+      printf("num_fds: %zu\tindex: %zu\tcurrent socket: %d\n", num_fds, i,
+             pfds[i].fd);
       // if there's a request, spawn a worker thread to deal with it
       if (pfds[i].revents & POLLIN) {
         // indicate that we're going to change the client list
@@ -469,10 +490,13 @@ void handle_request(void *arg) {
   handle_request_t *args = (handle_request_t *)arg;
   int sockfd = args->sockfd, index = args->index, res;
   uint8_t type;
+
+  printf("Entering handle_request from socket %d...\n", sockfd);
   // receive message from client
   void *msg = recv_command_msg(sockfd, &type, &res);
   // if failed to receive message, server closes connection
   if (res != 0) {
+    fprintf(stderr, "[handle_request] See above. result: %d\n", res);
     // only close if it was client disconnecting
     if (res == 1) {
       pthread_mutex_lock(&client_control.clients_mtx);
@@ -486,8 +510,10 @@ void handle_request(void *arg) {
     if (type == MESSAGE_SET_STATION) {
       uint16_t new_station = ((set_station_t *)buf)->station_number;
       // swap stations
+      pthread_mutex_lock(&client_control.clients_mtx);
       swap_stations(&station_control, &client_control.client_vec.conns[index],
                     new_station);
+      pthread_mutex_unlock(&client_control.clients_mtx);
       // synchronize access
       pthread_mutex_lock(&station_control.station_mtx);
       // get station's song
@@ -498,15 +524,20 @@ void handle_request(void *arg) {
       pthread_mutex_unlock(&station_control.station_mtx);
 
       // send response to client
-      sprintf(buf, "Switched to Station %d. Now playing: [%s]\n", new_station,
+      sprintf(buf, "Switched to Station %d. Now playing: [\"%s\"]", new_station,
               song_name);
-      send_reply_msg(sockfd, REPLY_ANNOUNCE, strlen(buf), buf);
+      printf("strlen(buf): %lu\n", strlen(buf));
+      if (send_reply_msg(sockfd, REPLY_ANNOUNCE, strlen(buf), buf) == -1) {
+        fprintf(stderr, "[handle_request] See above error messages.\n");
+      }
     } else {
       // invalid command; indicate as such
       sprintf(buf, "Invalid command: Got %d, must be within [%s].\n", type,
               "MESSAGE_SET_STATION");
       send_reply_msg(sockfd, REPLY_INVALID, strlen(buf), buf);
     }
+
+    printf("Sent reply message!\n");
 
     // free message when done
     free(msg);

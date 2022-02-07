@@ -123,6 +123,7 @@ int send_to_connections(station_t *station) {
   client_connection_t *it;
   sync_list_iterate_begin(&station->client_list, it, client_connection_t,
                           link) {
+    // TODO: remove sendtoall
     if ((ret = sendtoall(it->client_fd, station->buf, sizeof(station->buf),
                          it->udp_addr, it->addr_len))) {
       fprintf(stderr,
@@ -143,10 +144,22 @@ int send_to_connections(station_t *station) {
 void *stream_music_loop(void *arg) {
   station_t *station = (station_t *)arg;
 
+  // record start/end of sending
+  int ret;
+  struct timeval tv_start, tv_end;
+  suseconds_t elapsed, wait;
+
   // until something stops us, read from song file, then send to every client
   // note that each loop reads in 1/16 of 16 KiB, so we should try to finish 16
   // loops every second
-  while (1) {
+  while (0) {
+    // note time of the start of operations
+    ret = gettimeofday(&tv_start, NULL);
+    if (ret == -1) {
+      perror("[stream_music_loop] gettimeofday");
+      continue;
+    }
+
     // read from song file
     if (read_chunk(station) == -1) // an error occurred, so quit
       break;
@@ -158,10 +171,16 @@ void *stream_music_loop(void *arg) {
       break;
     }
 
-    // 1 * 10^6 / 16 = 62500, so we wait for 62500 microseconds
-    if (usleep(WAIT_TIME)) {
-      perror("stream_music_loop: usleep");
-      break;
+    // note time of the end of operations
+    ret = gettimeofday(&tv_end, NULL);
+    elapsed = tv_end.tv_usec - tv_start.tv_usec;
+    // 1 * 10^6 / 16 = 62500 microseconds initially, then subtract time elapsed
+    // between start and end of operations
+    wait = WAIT_TIME - elapsed;
+
+    // only sleep if elapsed time is less than initial wait time
+    if (wait > 0 && usleep(wait)) {
+      perror("[stream_music_loop] usleep");
     }
   }
 

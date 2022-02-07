@@ -4,15 +4,11 @@
 #include "list.h"
 #include "util.h"
 
-// helper for easy definitions of pollfds from fds
-#define POLLFD(new_fd)                                                         \
-  (struct pollfd) { .fd = new_fd, .events = POLLIN }
-
 /**
  * Struct representing a single client connection.
- * - Both tcp_addr and udp_addr are needed to send information to both the
- * listener and control endpoints. One could set the UDP address of tcp_addr,
- * send information, then reset the port, but that's kinda clunky ¯\_(ツ)_/¯
+ * - Both tcp_fd and udp_fd are needed to send information to both the listener
+ * and control endpoints. tcp_addr and udp_addr are used to print information
+ * about the IP/port address of each connection, if necessary.
  *
  * For the struct sockaddrs, I chose to use malloc instead of having a static
  * struct; this way, I could support both IPv4 and IPv6. I have now learned
@@ -22,126 +18,30 @@
  * allocated `struct sockaddr_storage`s.
  */
 typedef struct {
-  list_link_t link;          // for the doubly linked lists
-  int client_fd;             // TCP connection socket
-  struct sockaddr *tcp_addr; // TCP address
-  struct sockaddr *udp_addr; // UDP address
-  socklen_t addr_len;        // length of address; only difference is port
-  uint16_t udp_port;         // store UDP port
-  int current_station;       // currently connected station
+  list_link_t link;                 // for the doubly linked lists
+  int tcp_fd;                       // TCP connection socket
+  int udp_fd;                       // UDP connection socket
+  struct sockaddr_storage tcp_addr; // TCP address
+  struct sockaddr_storage udp_addr; // UDP address
+  socklen_t addr_len;  // address length; only difference is type + port
+  int current_station; // currently connected station
 } client_connection_t;
 
 /**
- * Struct representing a vector of clients.
- *  - Client connections and pollfds are each stored in a dynamically sized
- * array; vector operations may be assumed for insertion/deletion from the
- * vector.
- *
- *  NOTE: `conns` AND `pfds` MUST BE EXACTLY SYNCHRONIZED, **OFFSET BY 1**:
- * INDEX `i` IN `conns` MUST CORRESPOND TO THE APPROPRIATE SFD AT `pfds[i + 1]`.
- *    - this separation is necessary to support the poll(2) system call;
- *    otherwise, I'd really like to encapsulate this into one connection :/
- *
- * Unfortunately, there's no good way to synchronize access to the pollfds
- * struct while a thread is blocking `poll` on it; thus, we have to include
- * listening for incoming connections within this pollfd structure. This causes
- * an offset by 1 in the array.
- */
-typedef struct {
-  client_connection_t *conns; // array of connections
-  struct pollfd *pfds;        // array of struct pollfds
-  size_t size;                // current size of a vector array
-  size_t max;                 // current max size of a vector array
-  int listener;               // listener socket
-} client_vector_t;
-
-/**
- * Initializes a client vector with the specified size and listener socket.
- *
- * Inputs:
- * - client_vector_t *client_vec: the client vector to fill
- * - size_t max: the initial max size
- * - int listener: the listener socket for connections
- *
- * Returns:
- * - 0 on success, -1 on failure
- */
-int init_client_vector(client_vector_t *client_vec, size_t max, int listener);
-
-/**
- * Destroys a client vector. Frees up all dynamically allocated portions inside!
- *
- * Inputs:
- * - client_vector_t *client_vec: client vector to free
- */
-void destroy_client_vector(client_vector_t *client_vec);
-
-/**
- * Adds a client connection to a vector of clients.
- *
- * Inputs:
- * - client_vector_t *client_vec: pointer to a vector of client connections
- * - int client_fd: the client's socket file descriptor
- * - uint16_t udp_port: the UDP port of the client's listener. If zero, we must
- * fill in later!
- * - struct sockaddr *sa: the client's socket address
- * - socklen_t sa_len: the length of the client's socket address
- *
- * Returns:
- * - index where it was placed on success, -1 on failure
- */
-int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
-               struct sockaddr *sa, socklen_t sa_len);
-
-/**
- * Removes a client connection from a vector of client connections. DOES NOT
- * RESIZE TO ALLOW REMOVAL IN ITERATIONS! EXPLICITLY CALL resize_client_vector()
- * IF YOU WANT TO RESIZE.
- *
- * Inputs:
- * - client_vector_t *client_vec: pointer to a vector of client connections
- * - int index: index of client to delete
- */
-void remove_client(client_vector_t *client_vec, int index);
-
-/**
- * Resizes the client vector:
- *  - if positive, must have new_max >= size
- *  - if negative, shrinks if appropriate i.e. size < max / 2.
- *
- * Inputs:
- * - client_vector_t *client_vec: pointer to a vector of client connections
- * - int new_max: desired reallocation size
- *
- * Returns:
- * - 0 on success, -1 on failure
- */
-int resize_client_vector(client_vector_t *client_vec, int new_max);
-
-/**
- * Initializes a client connection given a client socket, (optionally) UDP port,
- * and sockaddr
+ * Initializes a client connection given a TCP/UDP client sockets,
+ * and their respective sockaddr information
  *
  * Inputs:
  * - client_connection_t *conn: the connection to initialize
- * - int client_fd: the client's socket file descriptor
- * - uint16_t udp_port: the UDP port of the client's listener.
- * - struct sockaddr *sa: the client's socket address
- * - socklen_t sa_len: the length of the client's socket address
- *
- * Returns:
- * - 0 on success, -1 on failure
+ * - int tcp_fd: the TCP client's socket file descriptor
+ * - int udp_fd: the UDP client's socket file descriptor
+ * - struct sockaddr_storage tcp_sa: the TCP client's socket address
+ * - struct sockaddr_storage tcp_sa: the UDP client's socket address
+ * - socklen_t sa_len: the length of the socket addresses
  */
-int init_connection(client_connection_t *conn, int client_fd, uint16_t udp_port,
-                    struct sockaddr *sa, socklen_t sa_len);
-
-/**
- * Update a client connection's port.
- *
- * Inputs:
- * - uint16_t udp_port: the UDP port of the client's listener.
- */
-void update_conn_port(client_connection_t *conn, uint16_t udp_port);
+void init_connection(client_connection_t *conn, int tcp_fd, uint16_t udp_fd,
+                     struct sockaddr *tcp_sa, struct sockaddr *udp_sa,
+                     socklen_t sa_len);
 
 /**
  * Destroys a dynamically initialized connection, closing the client file
