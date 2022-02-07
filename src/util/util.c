@@ -35,8 +35,10 @@ void get_addr_str(char ipstr[INET6_ADDRSTRLEN], struct sockaddr *sa) {
 void get_address(char buf[], struct sockaddr *sa) {
   char ipstr[INET6_ADDRSTRLEN];
   if (inet_ntop(sa->sa_family, get_in_addr(sa), ipstr, INET6_ADDRSTRLEN) ==
-      NULL)
+      NULL) {
+    printf("sa->sa_family: %d\n", sa->sa_family);
     fatal_error("inet_ntop");
+  }
   unsigned short port = get_in_port(sa);
   sprintf(buf, "%s:%d", ipstr, port);
 }
@@ -106,7 +108,8 @@ int recvall(int sockfd, void *buf, int len) {
     }
     // display if server disconnected
     if (n == 0) {
-      fprintf(stderr, "Server closed the connection or disconnected!\n");
+      fprintf(stderr, "Socket %d closed the connection or disconnected!\n",
+              sockfd);
       return 1;
     }
     // otherwise, update counts
@@ -168,7 +171,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
 
   // if no connection works, display error, free address info and exit
   if (r == NULL) {
-    fprintf(stderr, "[get_socket] No available ports on %s!\n", port);
+    fprintf(stderr, "[get_socket] No available services on port %s.\n", port);
     freeaddrinfo(res);
     return -1;
   }

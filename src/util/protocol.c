@@ -26,16 +26,22 @@ int send_command_msg(int sockfd, uint8_t cmd, uint16_t val) {
  * from there. I choose to read the command type first, then read the rest, in
  * case I want to extend the Snowcast protocol for different commands.
  */
-void *recv_command_msg(int sockfd, uint8_t *reply) {
+void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
+  *res = 0;
   // read in command type; only 1 byte
-  if (recvall(sockfd, reply, sizeof(*reply)) == -1)
+  int ret = recvall(sockfd, reply, sizeof(*reply));
+  if (ret != 0) {
+    *res = ret;
     return NULL;
+  }
 
   if (*reply == MESSAGE_HELLO) {
     // if Hello, read in two bytes for the UDP port
     uint16_t udp_port;
-    if (recvall(sockfd, &udp_port, sizeof(udp_port)) == -1)
+    if ((ret = recvall(sockfd, &udp_port, sizeof(udp_port))) != 0) {
+      *res = ret;
       return NULL;
+    }
     // create dynamic pointer to Welcome message, and set values
     hello_t *hello = malloc(sizeof(hello_t));
     hello->command_type = *reply;
@@ -44,14 +50,17 @@ void *recv_command_msg(int sockfd, uint8_t *reply) {
   } else if (*reply == MESSAGE_SET_STATION) {
     // if Set Station, read in two bytes for the desired station
     uint16_t station_number;
-    if (recvall(sockfd, &station_number, sizeof(station_number)) == -1)
+    if ((ret = recvall(sockfd, &station_number, sizeof(station_number))) != 0) {
+      *res = ret;
       return NULL;
+    }
     set_station_t *set_station = malloc(sizeof(set_station_t));
     set_station->command_type = *reply;
     set_station->station_number = station_number;
     return set_station;
   } else {
     // Otherwise, not a valid message, so indicate as such
+    *res = -1;
     return NULL;
   }
 }

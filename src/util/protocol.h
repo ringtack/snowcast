@@ -62,12 +62,14 @@ int send_command_msg(int sockfd, uint8_t cmd, uint16_t val);
  * Inputs:
  * - int sockfd: the connection socket
  * - uint8_t *reply: a pointer to a command type variable
+ * - int *res: address to store the result
  *
  * Returns:
  * - a dynamically allocated pointer to the command struct, or NULL on error. If
- * successful, sets reply to the appropriate type.
+ * successful, sets reply to the appropriate type. Updates res with the return
+ * condition (-1: server issue, 0: success, 1: client disconnected).
  */
-void *recv_command_msg(int sockfd, uint8_t *reply);
+void *recv_command_msg(int sockfd, uint8_t *reply, int *res);
 
 /**
  * Sends a reply message.

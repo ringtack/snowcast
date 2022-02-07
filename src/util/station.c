@@ -37,13 +37,13 @@ station_t *init_station(int station_number, char *song_name) {
   // start running streaming thread
   int ret;
   if ((ret = pthread_create(&station->streamer, NULL,
-                            (void *(*)(void *))stream_music_loop,
-                            (void *)&station))) {
+                            (void *(*)(void *))stream_music_loop, station)) ||
+      pthread_detach(station->streamer)) {
     // clean up allocations
     fclose(song_file);
     free(station->song_name);
     free(station);
-    handle_error_en(ret, "init_station: pthread_create");
+    handle_error_en(ret, "init_station: pthread_{create, detach}");
   }
 
   return station;
@@ -52,31 +52,22 @@ station_t *init_station(int station_number, char *song_name) {
 void destroy_station(station_t *station) {
   assert(station != NULL);
 
-  // destroy every client
-  client_connection_t *client;
-  sync_list_iterate_begin(&station->client_list, client, client_connection_t,
-                          link) {
-    destroy_connection(client);
-  }
-  sync_list_iterate_end(&station->client_list);
-
+  // don't need to destroy every client; client_control handles that
   // this is just a mutex destroy; check if valid
   if (sync_list_destroy(&(station->client_list)))
     fprintf(stderr, "failed to destroy station %d's mutex.\n",
             station->station_number);
 
+  // cancel thread [TODO: implement cleanup handler for cancels]; do this before
+  // closing, to prevent use after free/close
+  int ret = pthread_cancel(station->streamer);
+  if (ret)
+    handle_error_en(ret, "destroy_station: pthread_cancel");
+
   // free information that was allocated by making a string duplicate
   free(station->song_name);
   if (fclose(station->song_file) != 0)
     perror("destroy_station: fclose");
-
-  // cancel then join thread [TODO: implement cleanup handler for cancels]
-  int ret = pthread_cancel(station->streamer);
-  if (!ret)
-    handle_error_en(ret, "destroy_station: pthread_cancel");
-  ret = pthread_join(station->streamer, NULL);
-  if (!ret)
-    handle_error_en(ret, "destroy_station: pthread_cancel");
 
   // free struct itself
   free(station);
@@ -105,21 +96,23 @@ int read_chunk(station_t *station) {
     bytesleft -= ret;
     // if 0, something went wrong
     if (ret == 0) {
+      printf("nbytes: %d\tbytesleft: %d\tret: %d\n", nbytes, bytesleft, ret);
       fprintf(stderr, "[Station %d] Failed to read from song %s.\n",
               station->station_number, station->song_name);
       return -1;
       // otherwise, we've reached the end of a file, but need to read more; so,
       // restart to beginning of song
     } else if (nbytes < total) {
-      printf("[Station %d] Finished song %s! Repeating...\n",
-             station->station_number, station->song_name);
+      // TODO: send to every connected client
+      /* printf("[Station %d] Finished song %s! Repeating...\n", */
+      /* station->station_number, station->song_name); */
       if (fseek(station->song_file, 0, SEEK_SET) == -1) {
-        perror("read_chunk: fseek");
+        perror("[read_chunk] fseek");
         return -1;
       }
     }
   }
-  return ret;
+  return 0;
 }
 
 int send_to_connections(station_t *station) {
@@ -155,7 +148,7 @@ void *stream_music_loop(void *arg) {
   // loops every second
   while (1) {
     // read from song file
-    if (read_chunk(station)) // an error occurred, so quit
+    if (read_chunk(station) == -1) // an error occurred, so quit
       break;
 
     // send to connections

@@ -60,7 +60,7 @@ void accept_connection(station_t *station, client_connection_t *conn);
  *
  * - station_t *station: the station of interest
  * - client_connection_t *conn: a dynamically allocated pointer to a
- * disconnectingconnection
+ * disconnecting connection
  */
 void remove_connection(station_t *station, client_connection_t *conn);
 
@@ -72,7 +72,7 @@ void remove_connection(station_t *station, client_connection_t *conn);
  * - station_t *station: station to read
  *
  * Returns:
- * - 0 on success, non-zero on failure
+ * - 0 on success, -1 on failure
  */
 int read_chunk(station_t *station);
 

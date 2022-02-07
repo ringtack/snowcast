@@ -1,5 +1,10 @@
 #include "snowcast_server.h"
 
+// Global control structures
+server_control_t server_control;
+station_control_t station_control;
+client_control_t client_control;
+
 int main(int argc, char *argv[]) {
   if (argc < 3) {
     fprintf(
@@ -8,7 +13,9 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  //// INITIALIZATION ////
+  /* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+ */
+  /* |I|N|I|T|I|A|L|I|Z|A|T|I|O|N| */
+  /* +-+-+-+-+-+-+-+-+-+-+-+-+-+-+ */
   // open listener socket
   int listener = get_socket(NULL, argv[1], SOCK_STREAM);
   if (listener == -1)
@@ -18,13 +25,11 @@ int main(int argc, char *argv[]) {
   // Initialize client, server, and station control structs
   // clean up everything on failure
   // TODO: do I actually need the destroy_struct... calls? so tedious........
-  server_control_t server_control;
   if ((ret = init_server_control(&server_control, INIT_NUM_THREADS))) {
     close(listener);
     exit(1);
   }
 
-  station_control_t station_control;
   size_t num_stations = argc - 2;
   char **songs = argv + 2;
   if ((ret = init_station_control(&station_control, num_stations, songs))) {
@@ -32,22 +37,67 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-  client_control_t client_control;
-  if ((ret = init_client_control(&client_control))) {
+  if ((ret = init_client_control(&client_control, listener))) {
     close(listener);
     exit(1);
   }
 
-  printf("Hi\n");
-  // TODO: ACCEPT CLIENTS IN A LOOP
-  // -> PUT INTO STATIONS AND POLLING FDs
-  // -> CHECK IF SENDING DATA WORKS
+  /* +-+-+-+-+ +-+-+-+-+-+-+-+ */
+  /* |P|O|L|L| |C|L|I|E|N|T|S| */
+  /* +-+-+-+-+ +-+-+-+-+-+-+-+ */
+  // create dedicated polling thread
+  pthread_t poller;
+  if ((ret = pthread_create(&poller, NULL, (void *(*)(void *))poll_connections,
+                            (void *)&listener) ||
+             pthread_detach(poller))) {
+    handle_error_en(ret, "pthread_{create, detach}");
+  }
 
-  //// CLEANUP ////
+  /* +-+-+-+-+-+-+-+ +-+-+-+-+ +-+-+-+-+-+ */
+  /* |P|R|O|C|E|S|S| |U|S|E|R| |I|N|P|U|T| */
+  /* +-+-+-+-+-+-+-+ +-+-+-+-+ +-+-+-+-+-+ */
+  char msg[MAXBUFSIZ];
+  memset(msg, 0, sizeof(msg));
+  // loop until REPL receives 'q' or '<C-D>' to stop.
+  while (fgets(msg, MAXBUFSIZ, stdin)) {
+    process_input(msg, MAXBUFSIZ);
+    if (check_stopped(&server_control))
+      break;
+  }
 
-  // TODO: DESTROY SNOWCAST SERVER STRUCT
-  // TODO: DESTROY CLIENT CONTROL STRUCT
+  // cleanup label XD honestly not a bad idea I think; I'd rather not wrap in a
+  // bunch of scoped stuff
+  // cleanup:
 
+  /* +-+-+-+-+-+-+-+ */
+  /* |C|L|E|A|N|U|P| */
+  /* +-+-+-+-+-+-+-+ */
+  // set to stopped, in case someone typed <C-D>
+  pthread_mutex_lock(&server_control.server_mtx);
+  server_control.stopped = 1;
+  pthread_mutex_unlock(&server_control.server_mtx);
+
+  printf("Exiting snowcast server...\n");
+
+  // close listener socket
+  close(listener);
+
+  // wait for threads to finish
+  wait_thread_pool(server_control.t_pool);
+
+  // cancel polling thread, so it releases the client control mutex
+  ret = pthread_cancel(poller);
+  if (ret)
+    handle_error_en(ret, "main: pthread_cancel");
+
+  printf("Closed listener socket and shut down poller thread.\n");
+
+  // destroy control structs
+  destroy_client_control(&client_control);
+  destroy_station_control(&station_control);
+  destroy_server_control(&server_control);
+
+  printf("Goodbye!\n");
   return 0;
 }
 
@@ -75,22 +125,17 @@ int init_server_control(server_control_t *server_control, size_t num_threads) {
     if (ret)
       handle_error_en(ret, "init_server_control: pthread_{mutex,cond}_destroy");
   }
-  server_control->stopped = 1;
+  server_control->stopped = 0;
 
   return 0;
 }
 
 // TODO: FIX UP, I NEED TO HANDLE CLEANUP
 void destroy_server_control(server_control_t *server_control) {
-  // lock access to server control
-  pthread_mutex_lock(&server_control->server_mtx);
-
-  // set stopped to 1, then destroy thread pool
-  server_control->stopped = 1;
+  // destroy thread pool
   destroy_thread_pool(server_control->t_pool);
 
-  // unlock access, then destroy synchronization primitives
-  pthread_mutex_unlock(&server_control->server_mtx);
+  // destroy synchronization primitives
   int ret = pthread_mutex_destroy(&server_control->server_mtx) ||
             pthread_cond_destroy(&server_control->server_cond);
   if (ret)
@@ -100,7 +145,7 @@ void destroy_server_control(server_control_t *server_control) {
 int init_station_control(station_control_t *station_control,
                          size_t num_stations, char *songs[]) {
   // attempt to malloc enough space for the stations
-  station_control->stations = malloc(sizeof(station_t *));
+  station_control->stations = malloc(num_stations * sizeof(station_t *));
   if (station_control->stations == NULL) {
     fprintf(stderr,
             "[init_station_control] Could not malloc stations array.\n");
@@ -146,6 +191,9 @@ void destroy_station_control(station_control_t *station_control) {
 
   // unlock and destroy mutex
   pthread_mutex_unlock(&station_control->station_mtx);
+
+  printf("Stopped stations. ");
+
   int ret = pthread_mutex_destroy(&station_control->station_mtx);
   if (ret) {
     // TODO: print better output
@@ -153,8 +201,9 @@ void destroy_station_control(station_control_t *station_control) {
   }
 }
 
-int init_client_control(client_control_t *client_control) {
-  int ret = init_client_vector(&client_control->client_vec, INIT_MAX_CLIENTS);
+int init_client_control(client_control_t *client_control, int listener) {
+  int ret = init_client_vector(&client_control->client_vec, INIT_MAX_CLIENTS,
+                               listener);
   if (ret)
     return -1;
 
@@ -171,101 +220,301 @@ int init_client_control(client_control_t *client_control) {
 }
 
 void destroy_client_control(client_control_t *client_control) {
+  // first, try lock then unlock to ensure that mutex is properly cleaned up
+  pthread_mutex_lock(&client_control->clients_mtx);
+  // also synchronizes client cleanup
   destroy_client_vector(&client_control->client_vec);
+  pthread_mutex_unlock(&client_control->clients_mtx);
 
-  if (pthread_mutex_destroy(&client_control->clients_mtx) ||
-      pthread_cond_destroy(&client_control->pending_cond)) {
-    // TODO: print better output
-    fprintf(stderr, "[destroy_station_control] Failed to destroy cv/mutex.\n");
+  printf("Destroyed client information.\n");
+
+  // now, destroy mutex and cv
+  int ret = pthread_mutex_destroy(&client_control->clients_mtx);
+  if (ret) {
+    handle_error_en(ret, "destroy_client_control: pthread_mutex_destroy");
+  }
+
+  ret = pthread_cond_destroy(&client_control->pending_cond);
+  if (ret)
+    handle_error_en(ret, "destroy_client_control: pthread_cond_destroy");
+}
+
+void process_input(char *msg, size_t size) {
+  // if error, EOF, or 'q', mark server as stopped
+  if (msg[0] == 'q') {
+    pthread_mutex_lock(&server_control.server_mtx);
+    server_control.stopped = 1;
+    pthread_mutex_unlock(&server_control.server_mtx);
+    // otherwise, print information
+  } else if (msg[0] == 'p') {
+    // prevent changes to stations while we print
+    // [TODO: maybe change to rwlock?]
+    // TODO: this isn't necessary until I implement adding servers. Blegh!
+    pthread_mutex_lock(&station_control.station_mtx);
+
+    station_t *station;
+    // for every station, print the current song and connected clients.
+    for (size_t i = 0; i < station_control.num_stations; i++) {
+      station = station_control.stations[i];
+      printf("[Station %d: \"%s\"] Listening:\n", station->station_number,
+             station->song_name);
+      // iterate through connected clients
+      client_connection_t *conn;
+      sync_list_iterate_begin(&station->client_list, conn, client_connection_t,
+                              link) {
+        // clear buffer
+        memset(msg, 0, size);
+        // get and print client info
+        get_address(msg, conn->udp_addr);
+        printf("\t - %s\n", msg);
+      }
+      sync_list_iterate_end(&station->client_list);
+    }
+
+    // allow changes again
+    pthread_mutex_unlock(&station_control.station_mtx);
+  } else {
+    fprintf(
+        stderr,
+        "Invalid input! Usage: \n"
+        "\t'p': Print all stations, their current songs, and who's connected.\n"
+        "\t'q': Terminate the server.\n");
   }
 }
 
-// RANDOM TEST STUFF SHOULD REMOVE EVENTUALLY
-/* void test(char *argv[]) { */
-/* int sockfd = get_socket(NULL, argv[1], SOCK_STREAM); */
+int check_stopped(server_control_t *server_control) {
+  pthread_mutex_lock(&server_control->server_mtx);
+  int stopped = server_control->stopped;
+  pthread_mutex_unlock(&server_control->server_mtx);
+  return stopped;
+}
 
-/* struct sockaddr_storage from_addr; */
-/* socklen_t addr_len = sizeof(from_addr); */
-/* int cfd = accept(sockfd, (struct sockaddr *)&from_addr, &addr_len); */
+void atomic_incr(size_t *val, pthread_mutex_t *mtx) {
+  pthread_mutex_lock(mtx);
+  *val += 1;
+  pthread_mutex_unlock(mtx);
+}
 
-/* char ipstr[INET6_ADDRSTRLEN]; */
-/* get_addr_str(ipstr, (struct sockaddr *)&from_addr); */
-/* printf("Received connection from %s.\n", ipstr); */
+void swap_stations(station_control_t *sc, client_connection_t *conn,
+                   int new_station) {
+  int old_station = conn->current_station;
+  // if not currently in a station, join that one
+  if (old_station == -1) {
+    accept_connection(sc->stations[new_station], conn);
+  } else if (old_station != new_station) {
+    int lower_station = old_station < new_station ? old_station : new_station;
+    int higher_station = old_station < new_station ? new_station : old_station;
+    // otherwise, establish absolute order: lock lower station first
+    pthread_mutex_lock(&sc->stations[lower_station]->client_list.mtx);
+    pthread_mutex_lock(&sc->stations[higher_station]->client_list.mtx);
 
-/* hello_t msg; */
-/* int nbytes = recv(cfd, &msg, sizeof(msg), 0); */
-/* printf("got %d bytes\n", nbytes); */
+    // remove from old station, then add to new
+    remove_connection(sc->stations[old_station], conn);
+    accept_connection(sc->stations[new_station], conn);
 
-/* printf("Received hello: UDP port %d from client!\n", ntohs(msg.udp_port));
+    // unlock
+    pthread_mutex_unlock(&sc->stations[higher_station]->client_list.mtx);
+    pthread_mutex_unlock(&sc->stations[lower_station]->client_list.mtx);
+  } else {
+    // if identical, do nothing
+    return;
+  }
+}
+
+/* ===============================================================================
+ *                              THREAD FUNCTIONS
+ * ===============================================================================
  */
 
-/* welcome_t welcome = {REPLY_WELCOME, htons(258)}; */
-/* sendall(cfd, &welcome, sizeof(welcome)); */
+void process_connection(void *arg) {
+  int listener = *(int *)arg, client_fd;
 
-/* char *song = "Beethoven's 5th symphony"; */
-/* // char *song = ""; */
-/* uint16_t size = sizeof(announce_t) + strlen(song); */
-/* announce_t *announce = malloc(size); */
-/* announce->reply_type = REPLY_ANNOUNCE; */
-/* announce->songname_size = strlen(song); */
-/* memcpy(announce->songname, song, strlen(song)); */
-/* sendall(cfd, announce, size); */
-/* free(announce); */
+  // store connection information
+  char address[MAXADDRLEN];
+  struct sockaddr_storage from_addr;
+  socklen_t addr_len = sizeof(from_addr);
 
-/* char *reply = "incorrect command!"; */
-/* invalid_command_t *invalid = */
-/* malloc(sizeof(invalid_command_t) + strlen(reply)); */
-/* invalid->reply_type = REPLY_INVALID; */
-/* invalid->reply_string_size = strlen(reply); */
-/* memcpy(invalid->reply_string, reply, strlen(reply)); */
-/* sendall(cfd, invalid, sizeof(invalid_command_t) + strlen(reply)); */
-/* free(invalid); */
+  // accept client; this shouldn't block, since it's only called upon return
+  // from poll.
+  client_fd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
+  if (client_fd == -1) {
+    // if errors, exit function prematurely
+    perror("process_connection: accept");
+    return;
+  }
+  get_address(address, (struct sockaddr *)&from_addr);
 
-/* welcome.reply_type = 10; */
-/* sendall(cfd, &welcome, sizeof(welcome)); */
-/* } */
+  // wait for a response; this times out after 100ms, so if client still doesn't
+  // send HELLO, they get disconnected.
+  uint8_t type;
+  int res;
+  void *msg = recv_command_msg(client_fd, &type, &res);
+  // if NULL, an error occurred while recving, close the connection
+  if (msg == NULL) {
+    fprintf(stderr,
+            "Failed to receive message from client %s. Closing connection...\n",
+            address);
+    close(client_fd);
+    return;
+  }
+  // if reply type is not MESSAGE_HELLO, close the connection
+  if (type != MESSAGE_HELLO) {
+    fprintf(stderr,
+            "Client %s sent incorrect initial message. Expected: %s\tGot: %s\n",
+            address, "MESSAGE_HELLO",
+            type > MESSAGE_SET_STATION ? "NEITHER" : "MESSAGE_SET_STATION");
+    close(client_fd);
+    return;
+  }
+  // get UDP port from message, then free it (we don't need anymore)
+  uint16_t udp_port = ((hello_t *)msg)->udp_port;
+  free(msg);
 
-/* typedef struct { */
-/* int listener; */
-/* int num_stations; */
-/* } accept_args_t; */
+  // get num stations
+  pthread_mutex_lock(&station_control.station_mtx);
+  size_t num_stations = station_control.num_stations;
+  pthread_mutex_unlock(&station_control.station_mtx);
 
-/* void *accept_client(void *arg) { */
-/* accept_args_t *args = (accept_args_t *)arg; */
-/* int listener = args->listener; */
-/* int num_stations = args->num_stations; */
+  // synchronize access to client connections
+  pthread_mutex_lock(&client_control.clients_mtx);
+  // wrap in do {...} while(0) to allow breaking
+  do {
+    // attempt to add client
+    int index;
+    if ((index = add_client(&client_control.client_vec, client_fd, udp_port,
+                            (struct sockaddr *)&from_addr, addr_len)) == -1) {
+      close(client_fd);
+      break;
+    }
+    // send "Welcome" reply message; if fails, close stuff
+    if (send_reply_msg(client_fd, MESSAGE_HELLO, num_stations, NULL)) {
+      remove_client(&client_control.client_vec, index);
+      break;
+    }
+  } while (0);
+  // unlock; if we're the last pending operation, signal to cv
+  if (--client_control.num_pending == 0)
+    pthread_cond_signal(&client_control.pending_cond);
+  pthread_mutex_unlock(&client_control.clients_mtx);
+}
 
-/* // accept client connection */
-/* struct sockaddr_storage from_addr; */
-/* socklen_t addr_len = sizeof(from_addr); */
-/* int cfd = accept(listener, (struct sockaddr *)&from_addr, &addr_len); */
-/* // print information */
-/* char ipstr[INET6_ADDRSTRLEN]; */
-/* get_addr_str(ipstr, (struct sockaddr *)&from_addr); */
-/* printf("Received connection from %s.\n", ipstr); */
+void pthread_unlock_cleanup_handler(void *arg) {
+  pthread_mutex_unlock((pthread_mutex_t *)arg);
+}
 
-/* // wait for hello message */
-/* uint8_t type; */
-/* void *msg = recv_command_msg(cfd, &type); */
+void *poll_connections(void *arg) {
+  int listener = *(int *)arg;
+  int num_events;
+  size_t num_fds;
+  struct pollfd *pfds;
+  // repeat until stopped
+  while (!check_stopped(&server_control)) {
+    // first, check if any client operations are still pending
+    pthread_mutex_lock(&client_control.clients_mtx);
+    pthread_cleanup_push(pthread_unlock_cleanup_handler,
+                         &client_control.clients_mtx);
+    while (client_control.num_pending > 0)
+      pthread_cond_wait(&client_control.pending_cond,
+                        &client_control.clients_mtx);
 
-/* if (type == MESSAGE_HELLO) { */
-/* hello_t *hello = (hello_t *)msg; */
-/* printf("Received hello: UDP port %d from client!\n", */
-/* ntohs(hello->udp_port)); */
+    // check to resize
+    resize_client_vector(&client_control.client_vec, -1);
 
-/* printf("Sending Welcome to client %s...\n", ipstr); */
-/* if (send_reply_msg(cfd, REPLY_WELCOME, num_stations, NULL)) { */
-/* fprintf(stderr, "Could not send Welcome to client %s.\n", ipstr); */
-/* exit(1); */
-/* } */
-/* } else { */
-/* fprintf(stderr, "Did not receive first Hello from client %s.\n", ipstr); */
-/* // TODO: OTHER CLEANUP */
-/* exit(1); */
-/* } */
+    // once it's safe to attempt, poll indefinitely until a request/connection
+    //
+    // [Aside: how is safety guaranteed? In this implementation, this function
+    // (i.e. the poller) is the only one capable of appending tasks that can
+    // modify the client control vector; thus, as long as no tasks added by this
+    // function are waiting, we can synchronously poll.]
+    num_fds = client_control.client_vec.size + 1;
+    pfds = client_control.client_vec.pfds;
+    num_events = poll(pfds, num_fds, -1);
 
-/* printf("Done.\n"); */
-/* free(msg); */
+    // once we're done polling, we can unlock the mutex
+    pthread_cleanup_pop(1);
 
-/* return NULL; */
-/* } */
+    // if no event (somehow) or an error occurred, go again
+    if (num_events <= 0) {
+      if (num_events < 0)
+        perror("poll_connections: poll");
+      continue;
+    }
+
+    // if listener has something, handle its connection
+    if (pfds[0].revents & POLLIN) {
+      atomic_incr(&client_control.num_pending, &client_control.clients_mtx);
+      process_connection(&listener);
+    }
+
+    // loop through all client connections
+    // TODO: handle synchronously removing connections
+    for (size_t i = 1; i < num_fds; i++) {
+      // if there's a request, spawn a worker thread to deal with it
+      if (pfds[i].revents & POLLIN) {
+        // indicate that we're going to change the client list
+        atomic_incr(&client_control.num_pending, &client_control.clients_mtx);
+        handle_request_t *args = malloc(sizeof(handle_request_t));
+        args->sockfd = pfds[i].fd;
+        args->index = i - 1;
+        add_job(server_control.t_pool, handle_request, (void *)args);
+      }
+    }
+  }
+
+  return NULL;
+}
+
+void handle_request(void *arg) {
+  // get arguments
+  handle_request_t *args = (handle_request_t *)arg;
+  int sockfd = args->sockfd, index = args->index, res;
+  uint8_t type;
+  // receive message from client
+  void *msg = recv_command_msg(sockfd, &type, &res);
+  // if failed to receive message, server closes connection
+  if (res != 0) {
+    // only close if it was client disconnecting
+    if (res == 1) {
+      pthread_mutex_lock(&client_control.clients_mtx);
+      remove_client(&client_control.client_vec, index);
+      pthread_mutex_unlock(&client_control.clients_mtx);
+    }
+  } else {
+    // store message
+    char buf[MAXBUFSIZ];
+    memset(buf, 0, sizeof(buf));
+    if (type == MESSAGE_SET_STATION) {
+      uint16_t new_station = ((set_station_t *)buf)->station_number;
+      // swap stations
+      swap_stations(&station_control, &client_control.client_vec.conns[index],
+                    new_station);
+      // synchronize access
+      pthread_mutex_lock(&station_control.station_mtx);
+      // get station's song
+      char song_name[MAXSONGLEN];
+      memset(song_name, 0, sizeof(song_name));
+      strcpy(song_name, station_control.stations[new_station]->song_name);
+      // no longer need synchronization
+      pthread_mutex_unlock(&station_control.station_mtx);
+
+      // send response to client
+      sprintf(buf, "Switched to Station %d. Now playing: [%s]\n", new_station,
+              song_name);
+      send_reply_msg(sockfd, REPLY_ANNOUNCE, strlen(buf), buf);
+    } else {
+      // invalid command; indicate as such
+      sprintf(buf, "Invalid command: Got %d, must be within [%s].\n", type,
+              "MESSAGE_SET_STATION");
+      send_reply_msg(sockfd, REPLY_INVALID, strlen(buf), buf);
+    }
+
+    // free message when done
+    free(msg);
+  }
+
+  // decrement and potentially signal to cv
+  pthread_mutex_lock(&client_control.clients_mtx);
+  if (--client_control.num_pending == 0)
+    pthread_cond_signal(&client_control.pending_cond);
+  pthread_mutex_unlock(&client_control.clients_mtx);
+}

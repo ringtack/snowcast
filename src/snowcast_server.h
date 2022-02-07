@@ -7,6 +7,10 @@
 
 #define INIT_MAX_CLIENTS 5
 #define INIT_NUM_THREADS 16
+
+#define MAXADDRLEN 64
+#define MAXSONGLEN (MAXBUFSIZ / 2)
+
 /*
  *  ____                                   _     ____
  * / ___| _ __   _____      _____ __ _ ___| |_  / ___|  ___ _ ____   _____ _ __
@@ -77,6 +81,11 @@ typedef struct {
   // TODO: implement a signal handler
 } client_control_t;
 
+/* ===============================================================================
+ *                              HELPER FUNCTIONS
+ * ===============================================================================
+ */
+
 /**
  * Initializes a server control struct with the specified number of threads in
  * the thread pool.
@@ -123,15 +132,16 @@ int init_station_control(station_control_t *station_control,
 void destroy_station_control(station_control_t *station_control);
 
 /**
- * Initializes a client control struct.
+ * Initializes a client control struct with a listener socket.
  *
  * Inputs:
  * - client_control_t *client_control: the client control struct to initialize.
+ * - int listener: the listener socket
  *
  * Returns:
  * - 0 on success, -1 on failure
  */
-int init_client_control(client_control_t *client_control);
+int init_client_control(client_control_t *client_control, int listener);
 
 /**
  * Cleans up a client control struct.
@@ -140,5 +150,101 @@ int init_client_control(client_control_t *client_control);
  * - client_control_t *client_control: the client control struct to clean up
  */
 void destroy_client_control(client_control_t *client_control);
+
+/**
+ * Handles user input from stdin.
+ * - On 'p', prints a list of stations, along with all clients connected to
+ * them.
+ * - On 'q', marks the server as stopped, which commences server cleanup and
+ * termination.
+ *
+ * Inputs:
+ * - char *msg: the user message
+ * - size_t size: the max size of the buffer
+ */
+void process_input(char *msg, size_t size);
+
+/**
+ * Atomic check if stopped.
+ *
+ * Inputs:
+ * - server_control_t *server_control: server to check
+ *
+ * Returns:
+ * - the value of stopped
+ */
+int check_stopped(server_control_t *server_control);
+
+/**
+ * Atomically increments a size_t.
+ *
+ * Inputs:
+ * - size_t *val: pointer to an size_t
+ * - pthread_mutex_t *mtx: pointer to a mutex to synchronize
+ */
+void atomic_incr(size_t *val, pthread_mutex_t *mtx);
+
+/**
+ * Swaps the stations of a client; removes client from old station (if
+ * applicable), and adds to new station.
+ *
+ * Inputs:
+ * - station_control_t *sc: station control struct
+ * - client_connection_t *conn: connection to swap
+ * - int new_station: destination station
+ */
+void swap_stations(station_control_t *sc, client_connection_t *conn,
+                   int new_station);
+/*
+===============================================================================
+ *                        THREAD STRUCTURES/FUNCTIONS
+ * ===============================================================================
+ */
+
+/*
+ * NOTE: with all thread functions and structures, the "parent" function is
+ * responsible for mallocing space for the args_t struct, and the thread
+ * function is responsible for freeing that space.
+ *
+ * HOWEVER, if the function is meant for a thread pool, the thread pool will
+ * take care of freeing the allocated memory.
+ */
+
+/**
+ * Handles connections from TCP clients.
+ *
+ * Inputs:
+ * - int listener: the listener socket
+ */
+void process_connection(void *arg);
+
+/**
+ * Polls client connections for requests. Note that whenever this appends a work
+ * request to the thread pool, it must increment `client_control.num_pending`;
+ * every work request is also responsible for decrementing it when done.
+ *
+ * Inputs:
+ * - int listener: the listener socket
+ */
+void *poll_connections(void *arg);
+
+typedef struct {
+  int sockfd;
+  int index;
+} handle_request_t;
+
+/**
+ * Handles a request from a client. Currently, only SET_STATION is supported,
+ * but ideally more could be in the future.
+ *
+ * Note that whenever this appends a work request to the thread pool, it must
+ * increment `client_control.num_pending`; every work request is also
+ * responsible for decrementing it when done.
+ *
+ * Inputs:
+ * - int sockfd: the socket of the client connection
+ * - int index: index of the client connection
+ */
+void handle_request(void *arg);
 
 #endif

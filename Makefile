@@ -12,7 +12,7 @@ FILES = $(wildcard src/*.c src/*.h)
 EXECS = snowcast_control snowcast_listener snowcast_server
 
 # Include util folders!
-FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL)
+FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL) -fsanitize=address
 
 # Pretty printing
 TOILET = toilet -f term -F border:metal
@@ -40,8 +40,8 @@ PRINT_OBJ:
 PRINT_DONE:
 	@echo
 	@echo "$$($(TOILET) -f pagga USAGE)"
-	@echo "Finished building. To run:"
-	@echo "\t - ./snowcast_server <HOSTNAME> <PORT> [FILE1 [FILE2 [...]]]"
+	@echo "Finished building. To use, go to the build directory ($(BUILD)), then run:"
+	@echo "\t - ./snowcast_server <PORT> [FILE1 [FILE2 [...]]]"
 	@echo "\t - ./snowcast_control <SERVERNAME> <SERVERPORT> <UDPPORT>"
 	@echo "\t - ./snowcast_listener <UDPPORT>"
 
