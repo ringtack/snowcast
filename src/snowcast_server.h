@@ -6,7 +6,7 @@
 #include "util/station.h"
 #include "util/thread_pool.h"
 
-#define INIT_MAX_CLIENTS 8
+#define INIT_MAX_CLIENTS 4
 #define INIT_NUM_THREADS 8
 
 #define MAXADDRLEN 64
@@ -234,6 +234,18 @@ void atomic_incr(size_t *val, pthread_mutex_t *mtx);
  */
 int swap_stations(station_control_t *sc, client_connection_t *conn,
                   int new_station, int num_stations);
+
+/**
+ * Removes a client at index i from the server (i.e. from both the client vector
+ * and the station vector).
+ *
+ * Inputs:
+ * - client_control_t *cc: the client control structure
+ * - station_control_t *sc: the station control structure
+ * - int index: the index in the client vector of the client to remove
+ */
+void remove_client_from_server(client_control_t *cc, station_control_t *sc,
+                               int index);
 
 /*
  * ===============================================================================

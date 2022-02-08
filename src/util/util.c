@@ -29,7 +29,7 @@ void set_in_port(struct sockaddr *sa, uint16_t port) {
 void get_addr_str(char ipstr[INET6_ADDRSTRLEN], struct sockaddr *sa) {
   if (inet_ntop(sa->sa_family, get_in_addr(sa), ipstr, INET6_ADDRSTRLEN) ==
       NULL)
-    fatal_error("[get_addr_str] inet_ntop");
+    fatal_error("get_addr_str: inet_ntop");
 }
 
 void get_address(char buf[], struct sockaddr *sa) {
@@ -37,7 +37,7 @@ void get_address(char buf[], struct sockaddr *sa) {
   if (inet_ntop(sa->sa_family, get_in_addr(sa), ipstr, INET6_ADDRSTRLEN) ==
       NULL) {
     printf("sa->sa_family: %d\n", sa->sa_family);
-    fatal_error("[get_address] inet_ntop");
+    fatal_error("get_address: inet_ntop");
   }
   unsigned short port = get_in_port(sa);
   sprintf(buf, "%s:%d", ipstr, port);
@@ -52,7 +52,7 @@ int sendall(int sockfd, void *val, int len) {
     n = send(sockfd, val + total, bytesleft, 0);
     // if an error occurs while sending, print error and return -1
     if (n == -1) {
-      perror("[sendall] send");
+      perror("sendall: send");
       return n;
     }
     // otherwise, update counts
@@ -72,7 +72,7 @@ int sendtoall(int sockfd, void *val, int len, struct sockaddr *sa,
     n = sendto(sockfd, val + total, bytesleft, 0, sa, sa_len);
     // if an error occurs while sending, return -1
     if (n == -1) {
-      perror("[sendtoall] sendto");
+      perror("sendtoall: sendto");
       return n;
     }
     // otherwise, update counts
@@ -91,7 +91,7 @@ int recvall(int sockfd, void *buf, int len) {
   struct timeval timeout = {0, 100 * 1000};
   if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) ==
       -1) {
-    perror("[recvall] setsockopt");
+    perror("recvall: setsockopt");
     return -1;
   }
 
@@ -104,14 +104,12 @@ int recvall(int sockfd, void *buf, int len) {
     // display if error
     if (n == -1) {
       fprintf(stderr, "errno: %s\n", strerror(errno));
-      perror("[recvall] recv");
+      perror("recvall: recv");
       return -1;
     }
     // display if server disconnected
     if (n == 0) {
-      fprintf(stderr,
-              "[recvall] Socket %d closed the connection or disconnected!\n",
-              sockfd);
+      fprintf(stderr, "[Client %d] closed the connection.\n", sockfd);
       return 1;
     }
     // otherwise, update counts
@@ -134,7 +132,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
   // get address info
   int ret;
   if ((ret = getaddrinfo(hostname, port, &hints, &res)) == -1) {
-    fprintf(stderr, "[get_socket] getaddrinfo error: %s\n", gai_strerror(ret));
+    fprintf(stderr, "get_socket: getaddrinfo error: %s\n", gai_strerror(ret));
     return -1;
   }
 
@@ -173,7 +171,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
 
   // if no connection works, display error, free address info and exit
   if (r == NULL) {
-    fprintf(stderr, "[get_socket] No available services on port %s.\n", port);
+    fprintf(stderr, "get_socket: No available services on port %s.\n", port);
     freeaddrinfo(res);
     return -1;
   }

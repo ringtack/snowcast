@@ -36,7 +36,8 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
   int ret = recvall(sockfd, reply, sizeof(*reply));
   if (ret != 0) {
     *res = ret;
-    fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+    /* fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+     */
     return NULL;
   }
 
@@ -46,7 +47,8 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
     ret = recvall(sockfd, &udp_port, sizeof(udp_port));
     if (ret != 0) {
       *res = ret;
-      fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+      /* fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+       */
       return NULL;
     }
     // create dynamic pointer to Welcome message, and set values
@@ -60,7 +62,8 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
     ret = recvall(sockfd, &station_number, sizeof(station_number));
     if (ret != 0) {
       *res = ret;
-      fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+      /* fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
+       */
       return NULL;
     }
     set_station_t *set_station = malloc(sizeof(set_station_t));
@@ -79,7 +82,8 @@ int send_reply_msg(int sockfd, uint8_t cmd, uint16_t val, const char *msg) {
     welcome_t welcome = {cmd, htons(val)};
     int len = sizeof(welcome);
     if (sendall(sockfd, &welcome, len)) {
-      fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
+      /* fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
+       */
       return -1;
     }
   } else if (cmd == REPLY_ANNOUNCE || cmd == REPLY_INVALID) {
@@ -89,14 +93,16 @@ int send_reply_msg(int sockfd, uint8_t cmd, uint16_t val, const char *msg) {
     size_t size = sizeof(announce_t) + str_size * sizeof(char);
     announce_t *announce = malloc(size);
     if (announce == NULL) {
-      fprintf(stderr, "[send_reply_msg] Could not malloc command %d.\n", cmd);
+      /* fprintf(stderr, "[send_reply_msg] Could not malloc command %d.\n",
+       * cmd); */
       return -1;
     }
     announce->reply_type = cmd;
     announce->songname_size = str_size;
     memcpy(announce->songname, msg, str_size);
     if (sendall(sockfd, announce, size)) {
-      fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
+      /* fprintf(stderr, "[send_reply_msg] Refer to error messages above.\n");
+       */
       free(announce);
       return -1;
     }

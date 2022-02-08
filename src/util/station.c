@@ -4,14 +4,14 @@ station_t *init_station(int station_number, char *song_name) {
   // attempt to make UDP streaming socket for the server
   int ipv4_fd = socket(PF_INET, SOCK_DGRAM, 0);
   if (ipv4_fd == -1) {
-    perror("[init_station] socket");
+    perror("init_station: socket");
     return NULL;
   }
   // allow for both IPv4 and IPv6 addresses
   int ipv6_fd = socket(PF_INET6, SOCK_DGRAM, 0);
   if (ipv6_fd == -1) {
     close(ipv4_fd);
-    perror("[init_station] socket");
+    perror("init_station: socket");
     return NULL;
   }
 
@@ -121,22 +121,34 @@ int read_chunk(station_t *station) {
                 station->song_file);
     nbytes += ret;
     bytesleft -= ret;
-    // if 0, something went wrong
-    if (ret == 0) {
+    // if ferror, something went wrong
+    if (ferror(station->song_file)) {
       printf("nbytes: %d\tbytesleft: %d\tret: %d\n", nbytes, bytesleft, ret);
       fprintf(stderr, "[Station %d] Failed to read from song %s.\n",
               station->station_number, station->song_name);
       return -1;
-      // otherwise, we've reached the end of a file, but need to read more; so,
+      // otherwise, if we've reached the end of a file, but need to read more,
       // restart to beginning of song
-    } else if (nbytes < total) {
+    } else if (feof(station->song_file) || nbytes < total) {
       // TODO: send to every connected client
       /* printf("[Station %d] Finished song %s! Repeating...\n", */
       /* station->station_number, station->song_name); */
       if (fseek(station->song_file, 0, SEEK_SET) == -1) {
-        perror("[read_chunk] fseek");
+        perror("read_chunk: fseek");
         return -1;
       }
+      // notify clients that we've restarted the song
+      client_connection_t *it;
+      // store response string
+      char msg[MAXBUFSIZ];
+      memset(msg, 0, sizeof(msg));
+      sync_list_iterate_begin(&station->client_list, it, client_connection_t,
+                              link) {
+        sprintf(msg, "\"%s\" [Station %d]", station->song_name,
+                station->station_number);
+        send_reply_msg(it->client_fd, REPLY_ANNOUNCE, strlen(msg), msg);
+      }
+      sync_list_iterate_end(&station->client_list);
     }
   }
   return 0;
@@ -183,13 +195,13 @@ void *stream_music_loop(void *arg) {
   suseconds_t elapsed, wait;
 
   // until something stops us, read from song file, then send to every client
-  // note that each loop reads in 1/16 of 16 KiB, so we should try to finish 16
-  // loops every second
+  // note that each loop reads in 1/16 of 16 KiB, so we should try to finish
+  // 16 loops every second
   while (1) {
     // note time of the start of operations
     ret = gettimeofday(&tv_start, NULL);
     if (ret == -1) {
-      perror("[stream_music_loop] gettimeofday");
+      perror("stream_music_loop: gettimeofday");
       continue;
     }
 
@@ -200,24 +212,24 @@ void *stream_music_loop(void *arg) {
     // send to connections
     if (send_to_connections(station)) {
       // quit on error
-      fprintf(stderr, "[stream_music_loop] Refer to error messages above.\n");
+      fprintf(stderr, "stream_music_loop: Refer to error messages above.\n");
       break;
     }
 
     // note time of the end of operations
     ret = gettimeofday(&tv_end, NULL);
     if (ret == -1) {
-      perror("[stream_music_loop] gettimeofday");
+      perror("stream_music_loop: gettimeofday");
       continue;
     }
     elapsed = tv_end.tv_usec - tv_start.tv_usec;
-    // 1 * 10^6 / 16 = 62500 microseconds initially, then subtract time elapsed
-    // between start and end of operations
+    // 1 * 10^6 / 16 = 62500 microseconds initially, then subtract time
+    // elapsed between start and end of operations
     wait = WAIT_TIME - elapsed;
 
     // only sleep if elapsed time is less than initial wait time
     if (wait > 0 && usleep(wait)) {
-      perror("[stream_music_loop] usleep");
+      perror("stream_music_loop: usleep");
     }
   }
 

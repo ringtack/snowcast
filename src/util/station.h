@@ -7,6 +7,7 @@
  */
 
 #include "client_connection.h"
+#include "protocol.h"
 #include "sync_list.h"
 #include "util.h"
 

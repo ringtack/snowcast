@@ -58,11 +58,19 @@ int main(int argc, char *argv[]) {
   /* +-+-+-+-+-+-+-+ +-+-+-+-+ +-+-+-+-+-+ */
   char msg[MAXBUFSIZ];
   memset(msg, 0, sizeof(msg));
+
+  printf(
+      "Usage: \n"
+      "\t'p': Print all stations, their current songs, and who's connected.\n"
+      "\t'q': Terminate the server.\n");
+
+  printf("> ");
   // loop until REPL receives 'q' or '<C-D>' to stop.
   while (fgets(msg, MAXBUFSIZ, stdin)) {
     process_input(msg, MAXBUFSIZ);
     if (check_stopped(&server_control))
       break;
+    printf("> ");
   }
 
   // cleanup label XD honestly not a bad idea I think; I'd rather not wrap in a
@@ -279,8 +287,8 @@ void process_input(char *msg, size_t size) {
     // for every station, print the current song and connected clients.
     for (size_t i = 0; i < station_control.num_stations; i++) {
       station = station_control.stations[i];
-      printf("[Station %d: \"%s\"] Listening:\n", station->station_number,
-             station->song_name);
+      printf("[Station %d: \"%s\"] Connected clients:\n",
+             station->station_number, station->song_name);
       // iterate through connected clients
       client_connection_t *conn;
       sync_list_iterate_begin(&station->client_list, conn, client_connection_t,
@@ -296,12 +304,6 @@ void process_input(char *msg, size_t size) {
 
     // allow changes again
     unlock_station_control(&station_control);
-  } else {
-    fprintf(
-        stderr,
-        "Invalid input! Usage: \n"
-        "\t'p': Print all stations, their current songs, and who's connected.\n"
-        "\t'q': Terminate the server.\n");
   }
 }
 
@@ -329,10 +331,10 @@ int swap_stations(station_control_t *sc, client_connection_t *conn,
                   int new_station, int num_stations) {
   // verify that station is valid
   if (new_station >= num_stations || new_station < 0) {
-    fprintf(stderr,
-            "[swap_stations] Client desired invalid station (wanted station "
-            "%d, but have %d stations).\n",
-            new_station, num_stations);
+    /* fprintf(stderr, */
+    /* "[swap_stations] Client desired invalid station (wanted station " */
+    /* "%d, but have %d stations).\n", */
+    /* new_station, num_stations); */
     return -1;
   }
 
@@ -364,6 +366,30 @@ int swap_stations(station_control_t *sc, client_connection_t *conn,
   return 0;
 }
 
+void remove_client_from_server(client_control_t *cc, station_control_t *sc,
+                               int index) {
+  // get which connection it is
+  lock_client_control(cc);
+  client_connection_t *conn = get_client(&cc->client_vec, index);
+  int which_station = conn->current_station;
+
+  // only remove from station if client is actually connected
+  if (which_station >= 0) {
+    // lock station
+    lock_station_clients(sc->stations[which_station]);
+    // remove from station
+    remove_connection(conn);
+    // successfully cleaned up from station
+    unlock_station_clients(sc->stations[which_station]);
+  }
+
+  // remove client from client vector
+  remove_client(&cc->client_vec, index);
+
+  // done with client control
+  unlock_client_control(cc);
+}
+
 /* ===============================================================================
  *                              THREAD FUNCTIONS
  * ===============================================================================
@@ -382,13 +408,13 @@ void process_connection(void *arg) {
   int client_fd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
   if (client_fd == -1) {
     // if errors, exit function prematurely
-    perror("[process_connection] accept");
+    perror("process_connection: accept");
     return;
   }
 
   get_address(address, (struct sockaddr *)&from_addr);
-  printf("Received client connection from %s.\n", address);
-  printf("Awaiting a Hello... ");
+  printf("[Client %d] New client connected from %s; Awaiting a Hello...\n",
+         client_fd, address);
 
   // wait for a response; this times out after 100ms, so if client still doesn't
   // send HELLO, they get disconnected.
@@ -406,10 +432,11 @@ void process_connection(void *arg) {
   }
   // if reply type is not MESSAGE_HELLO, close the connection
   if (type != MESSAGE_HELLO) {
-    fprintf(stderr,
-            "Client %s sent incorrect initial message. Expected: %s\tGot: %s\n",
-            address, "MESSAGE_HELLO",
-            type > MESSAGE_SET_STATION ? "NEITHER" : "MESSAGE_SET_STATION");
+    fprintf(
+        stderr,
+        "[Client %d] Sent incorrect initial message. Expected: %s\tGot: %s\n",
+        client_fd, "MESSAGE_HELLO",
+        type > MESSAGE_SET_STATION ? "NEITHER" : "MESSAGE_SET_STATION");
     close(client_fd);
     return;
   }
@@ -417,7 +444,7 @@ void process_connection(void *arg) {
   uint16_t udp_port = ((hello_t *)msg)->udp_port;
   free(msg);
 
-  printf("Received Hello!\nSending Welcome... ");
+  printf("[Client %d] Received Hello! Sending Welcome...\n", client_fd);
 
   // get num stations
   size_t num_stations = get_num_stations(&station_control);
@@ -431,7 +458,6 @@ void process_connection(void *arg) {
                            (struct sockaddr *)&from_addr, addr_len);
     // on failure, close client connection and stop
     if (index == -1) {
-      printf("Closing client fd: %d\n", client_fd);
       close(client_fd);
       break;
     }
@@ -442,8 +468,6 @@ void process_connection(void *arg) {
       break;
     }
   } while (0);
-
-  printf("Done!\n");
 
   // unlock; if we're the last pending operation, signal to cv
   if (--client_control.num_pending == 0)
@@ -505,7 +529,7 @@ void *poll_connections(void *arg) {
     // loop through all client connections
     for (size_t i = 1; i < num_fds; i++) {
       // if there's a request, spawn a worker thread to deal with it
-      if (pfds[i].revents & POLLIN) {
+      if (client_control.client_vec.pfds[i].revents & POLLIN) {
         // indicate that we're going to change the client list
         atomic_incr(&client_control.num_pending, &client_control.clients_mtx);
         handle_request_t *args = malloc(sizeof(handle_request_t));
@@ -530,27 +554,9 @@ void handle_request(void *arg) {
 
   // if failed to receive message, server closes connection
   if (res != 0) {
-    // this case handles if msg == NULL!
-    fprintf(stderr, "[handle_request] See above. result: %d\n", res);
-    // only close if it was client disconnecting
+    // this case handles if msg == NULL! Only close if client disconnected.
     if (res == 1) {
-      // get which connection it is
-      lock_client_control(&client_control);
-      client_connection_t *conn = get_client(&client_control.client_vec, index);
-      int which_station = conn->current_station;
-
-      // lock station
-      lock_station_clients(station_control.stations[which_station]);
-      // remove from station
-      remove_connection(conn);
-      // successfully cleaned up from station
-      unlock_station_clients(station_control.stations[which_station]);
-
-      // remove client from client vector
-      remove_client(&client_control.client_vec, index);
-
-      // done with client control
-      unlock_client_control(&client_control);
+      remove_client_from_server(&client_control, &station_control, index);
     }
   } else {
     // sanity check; recv_command_msg should only be NULL if res != 0
@@ -565,7 +571,6 @@ void handle_request(void *arg) {
 
       // swap stations
       uint16_t new_station = ((set_station_t *)msg)->station_number;
-      printf("New station: %d\n", new_station);
       lock_client_control(&client_control);
       res = swap_stations(&station_control,
                           get_client(&client_control.client_vec, index),
@@ -575,9 +580,13 @@ void handle_request(void *arg) {
       // if they had invalid set stations request, send invalid request reply
       if (res == -1) {
         sprintf(buf,
-                "requested station %d, but server only has stations [0, %d).",
+                "Requested station %d, but server only has stations [0, %d).",
                 new_station, num_stations);
         send_reply_msg(sockfd, REPLY_INVALID, strlen(buf), buf);
+
+        // print to server, then close connection
+        fprintf(stderr, "[Client %d] %s\n", sockfd, buf);
+        remove_client_from_server(&client_control, &station_control, index);
       } else {
         // otherwise, announce to client that station switch was successful
         // synchronize access
@@ -592,17 +601,24 @@ void handle_request(void *arg) {
         unlock_station_control(&station_control);
 
         // send response to client
-        sprintf(buf, "Switched to Station %d. Now playing: [\"%s\"]",
-                new_station, song_name);
+        sprintf(buf, "\"%s\" [switch to Station %d]", song_name, new_station);
         if (send_reply_msg(sockfd, REPLY_ANNOUNCE, strlen(buf), buf) == -1) {
+          // on failure, remove client from connections
           fprintf(stderr, "[handle_request] See above error messages.\n");
+          remove_client_from_server(&client_control, &station_control, index);
         }
+
+        printf("[Client %d] Switched to station %d.\n", sockfd, new_station);
       }
     } else {
       // invalid command; indicate as such
-      sprintf(buf, "Invalid command: Got %d, must be within [%s].\n", type,
+      sprintf(buf, "got command of type %d, but must be within [%s].", type,
               "MESSAGE_SET_STATION");
       send_reply_msg(sockfd, REPLY_INVALID, strlen(buf), buf);
+
+      // remove client from server
+      fprintf(stderr, "[Client %d] %s\n", sockfd, buf);
+      remove_client_from_server(&client_control, &station_control, index);
     }
     // free message when done
     free(msg);
