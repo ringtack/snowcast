@@ -22,6 +22,8 @@ typedef struct {
   FILE *song_file;         // file to read the song
   char buf[CHUNK_SIZE];    // buffer to store processed song chunks
   pthread_t streamer;      // streamer thread
+  int ipv4_stream_fd;      // IPv4 streaming socket
+  int ipv6_stream_fd;      // IPv6 streaming socket
 } station_t;
 
 /**
@@ -46,7 +48,7 @@ station_t *init_station(int station_number, char *song_name);
 void destroy_station(station_t *station);
 
 /**
- * Accepts a connection to the station.
+ * Accepts a connection to the station. Not thread-safe!
  *
  * Inputs:
  * - station_t *station: the station of interest
@@ -56,13 +58,12 @@ void destroy_station(station_t *station);
 void accept_connection(station_t *station, client_connection_t *conn);
 
 /**
- * Removes a connection to the station.
+ * Removes a connection to the station. Not thread-safe!
  *
- * - station_t *station: the station of interest
  * - client_connection_t *conn: a dynamically allocated pointer to a
  * disconnecting connection
  */
-void remove_connection(station_t *station, client_connection_t *conn);
+void remove_connection(client_connection_t *conn);
 
 /**
  * Reads a chunk from the station's song file, where CHUNK_SIZE = 16384 / 16 =

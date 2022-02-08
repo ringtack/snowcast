@@ -1,27 +1,35 @@
 #include "client_connection.h"
 
-void init_connection(client_connection_t *conn, int tcp_fd, uint16_t udp_fd,
-                     struct sockaddr *tcp_sa, struct sockaddr *udp_sa,
-                     socklen_t sa_len) {
+client_connection_t *init_connection(int client_fd, uint16_t udp_port,
+                                     struct sockaddr *sa, socklen_t sa_len) {
+  // attempt to allocate space for the client connection
+  client_connection_t *conn = malloc(sizeof(client_connection_t));
+  if (conn == NULL) {
+    fprintf(stderr,
+            "[init_connection] Failed to malloc space for connection %d.\n",
+            client_fd);
+    return NULL;
+  }
   // initialize link for potential use in linked lists
   list_link_init(&conn->link);
 
-  // set TCP info
-  conn->tcp_fd = tcp_fd;
-  memcpy(&conn->tcp_addr, tcp_sa, sa_len);
+  // set client info
+  conn->client_fd = client_fd;
+  memcpy(&conn->tcp_addr, sa, sa_len);
 
   // set UDP info
-  conn->udp_fd = udp_fd;
-  memcpy(&conn->udp_addr, udp_sa, sa_len);
+  memcpy(&conn->udp_addr, sa, sa_len);
+  set_in_port((struct sockaddr *)&conn->udp_addr, udp_port);
 
   // same length for both addresses
   conn->addr_len = sa_len;
   conn->current_station = -1;
+
+  return conn;
 }
 
 void destroy_connection(client_connection_t *conn) {
-  fprintf(stderr, "Closing tcp fd [%d] and udp fd [%d]\n", conn->tcp_fd,
-          conn->udp_fd);
-  close(conn->tcp_fd);
-  close(conn->udp_fd);
+  fprintf(stderr, "Closing client fd [%d].\n", conn->client_fd);
+  close(conn->client_fd);
+  free(conn);
 }

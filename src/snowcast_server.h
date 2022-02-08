@@ -7,7 +7,7 @@
 #include "util/thread_pool.h"
 
 #define INIT_MAX_CLIENTS 8
-#define INIT_NUM_THREADS 16
+#define INIT_NUM_THREADS 8
 
 #define MAXADDRLEN 64
 #define MAXSONGLEN (MAXBUFSIZ / 2)
@@ -193,9 +193,13 @@ void atomic_incr(size_t *val, pthread_mutex_t *mtx);
  * - station_control_t *sc: station control struct
  * - client_connection_t *conn: connection to swap
  * - int new_station: destination station
+ *
+ * Returns:
+ * - 0 on success, -1 if invalid station
  */
-void swap_stations(station_control_t *sc, client_connection_t *conn,
-                   int new_station);
+int swap_stations(station_control_t *sc, client_connection_t *conn,
+                  int new_station, int num_stations);
+
 /*
 ===============================================================================
  *                        THREAD STRUCTURES/FUNCTIONS

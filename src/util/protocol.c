@@ -43,7 +43,8 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
   if (*reply == MESSAGE_HELLO) {
     // if Hello, read in two bytes for the UDP port
     uint16_t udp_port;
-    if ((ret = recvall(sockfd, &udp_port, sizeof(udp_port))) != 0) {
+    ret = recvall(sockfd, &udp_port, sizeof(udp_port));
+    if (ret != 0) {
       *res = ret;
       fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
       return NULL;
@@ -56,7 +57,8 @@ void *recv_command_msg(int sockfd, uint8_t *reply, int *res) {
   } else if (*reply == MESSAGE_SET_STATION) {
     // if Set Station, read in two bytes for the desired station
     uint16_t station_number;
-    if ((ret = recvall(sockfd, &station_number, sizeof(station_number))) != 0) {
+    ret = recvall(sockfd, &station_number, sizeof(station_number));
+    if (ret != 0) {
       *res = ret;
       fprintf(stderr, "[recv_command_msg] Refer to error messages above.\n");
       return NULL;

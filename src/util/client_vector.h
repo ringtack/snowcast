@@ -1,6 +1,8 @@
 #ifndef __CLIENT_VECTOR_H__
 #define __CLIENT_VECTOR_H__
+
 #include "client_connection.h"
+
 // helper for easy definitions of pollfds from fds
 #define POLLFD(new_fd)                                                         \
   (struct pollfd) { .fd = new_fd, .events = POLLIN }
@@ -22,11 +24,11 @@
  * an offset by 1 in the array.
  */
 typedef struct {
-  client_connection_t *conns; // array of connections
-  struct pollfd *pfds;        // array of struct pollfds
-  size_t size;                // current size of a vector array
-  size_t max;                 // current max size of a vector array
-  int listener;               // listener socket
+  client_connection_t **conns; // array of connections
+  struct pollfd *pfds;         // array of struct pollfds
+  size_t size;                 // current size of a vector array
+  size_t max;                  // current max size of a vector array
+  int listener;                // listener socket
 } client_vector_t;
 
 /**
@@ -54,19 +56,17 @@ void destroy_client_vector(client_vector_t *client_vec);
  * Adds a client connection to a vector of clients.
  *
  * Inputs:
- * - client_connection_t *conn: the connection to initialize
- * - int tcp_fd: the TCP client's socket file descriptor
- * - int udp_fd: the UDP client's socket file descriptor
- * - struct sockaddr_storage tcp_sa: the TCP client's socket address
- * - struct sockaddr_storage tcp_sa: the UDP client's socket address
+ * - client_vector_t *client_vec: the client vector
+ * - int client_fd: the TCP client's socket file descriptor
+ * - uint16_t udp_port: the UDP's listening port
+ * - struct sockaddr *sa: the TCP client's socket address
  * - socklen_t sa_len: the length of the socket addresses
  *
  * Returns:
  * - index where it was placed on success, -1 on failure
  */
-int add_client(client_vector_t *client_vec, int tcp_fd, int udp_fd,
-               struct sockaddr *tcp_sa, struct sockaddr *udp_sa,
-               socklen_t sa_len);
+int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
+               struct sockaddr *sa, socklen_t sa_len);
 
 /**
  * Removes a client connection from a vector of client connections. DOES NOT

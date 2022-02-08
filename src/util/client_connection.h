@@ -6,21 +6,14 @@
 
 /**
  * Struct representing a single client connection.
- * - Both tcp_fd and udp_fd are needed to send information to both the listener
- * and control endpoints. tcp_addr and udp_addr are used to print information
- * about the IP/port address of each connection, if necessary.
- *
- * For the struct sockaddrs, I chose to use malloc instead of having a static
- * struct; this way, I could support both IPv4 and IPv6. I have now learned
- * about `struct sockaddr_storage`; when/if I have the time, I'll migrate the
- * implementation.
- * - TODO: Migrate from dynamically allocated `struct sockaddrs` to statically
- * allocated `struct sockaddr_storage`s.
+ * - client_fd is the TCP socket of the client connection. tcp_addr and udp_addr
+ * are used to print information about the IP/port address of each connection,
+ * if necessary; in addition, udp_addr is needed for the station sock_fd to send
+ * information to.
  */
 typedef struct {
   list_link_t link;                 // for the doubly linked lists
-  int tcp_fd;                       // TCP connection socket
-  int udp_fd;                       // UDP connection socket
+  int client_fd;                    // TCP connection socket
   struct sockaddr_storage tcp_addr; // TCP address
   struct sockaddr_storage udp_addr; // UDP address
   socklen_t addr_len;  // address length; only difference is type + port
@@ -28,20 +21,20 @@ typedef struct {
 } client_connection_t;
 
 /**
- * Initializes a client connection given a TCP/UDP client sockets,
- * and their respective sockaddr information
+ * Initializes a client connection given a client socket, its sockaddr
+ * information, and a UDP port
  *
  * Inputs:
- * - client_connection_t *conn: the connection to initialize
- * - int tcp_fd: the TCP client's socket file descriptor
- * - int udp_fd: the UDP client's socket file descriptor
- * - struct sockaddr_storage tcp_sa: the TCP client's socket address
- * - struct sockaddr_storage tcp_sa: the UDP client's socket address
+ * - int client_fd: the TCP client's socket file descriptor
+ * - uint16_t udp_port: the UDP's listening port
+ * - struct sockaddr *sa: the TCP client's socket address
  * - socklen_t sa_len: the length of the socket addresses
+ *
+ * Returns:
+ * - a dynamically allocated client connection, or NULL on failure
  */
-void init_connection(client_connection_t *conn, int tcp_fd, uint16_t udp_fd,
-                     struct sockaddr *tcp_sa, struct sockaddr *udp_sa,
-                     socklen_t sa_len);
+client_connection_t *init_connection(int client_fd, uint16_t udp_port,
+                                     struct sockaddr *sa, socklen_t sa_len);
 
 /**
  * Destroys a dynamically initialized connection, closing the client file

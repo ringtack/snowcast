@@ -5,7 +5,7 @@ int init_client_vector(client_vector_t *client_vec, size_t max, int listener) {
   assert(max > 0);
 
   // attempt to malloc an initial `max` spaces for connections
-  client_vec->conns = malloc(max * sizeof(client_connection_t));
+  client_vec->conns = malloc(max * sizeof(client_connection_t *));
   if (client_vec->conns == NULL) {
     fprintf(stderr, "[init_client_vector] Failed to malloc client conns.\n");
     return -1;
@@ -33,7 +33,7 @@ int init_client_vector(client_vector_t *client_vec, size_t max, int listener) {
 void destroy_client_vector(client_vector_t *client_vec) {
   // destroy information of each connection
   for (size_t i = 0; i < client_vec->size; i++)
-    destroy_connection(&client_vec->conns[i]);
+    destroy_connection(client_vec->conns[i]);
 
   // free vectors for conns and pfds
   free(client_vec->conns);
@@ -41,24 +41,28 @@ void destroy_client_vector(client_vector_t *client_vec) {
   close(client_vec->listener);
 }
 
-int add_client(client_vector_t *client_vec, int tcp_fd, int udp_fd,
-               struct sockaddr *tcp_sa, struct sockaddr *udp_sa,
-               socklen_t sa_len) {
+int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
+               struct sockaddr *sa, socklen_t sa_len) {
   // check if we need more space
   if (client_vec->size == client_vec->max) {
     // attempt to resize; if fail, indicate
     int ret = resize_client_vector(client_vec, 2 * client_vec->max);
-    if (ret != 0)
+    if (ret != 0) {
+      fprintf(stderr, "[add_client] Failed to resize vector. See above.\n");
       return -1;
+    }
   }
 
   size_t i = client_vec->size;
   // initialize a connection
-  init_connection(&client_vec->conns[i], tcp_fd, udp_fd, tcp_sa, udp_sa,
-                  sa_len);
+  client_vec->conns[i] = init_connection(client_fd, udp_port, sa, sa_len);
+  if (client_vec->conns[i] == NULL) {
+    fprintf(stderr, "[add_client] Failed to add client. See above.\n");
+    return -1;
+  }
 
   // create pollfd for TCP client
-  client_vec->pfds[i + 1] = POLLFD(tcp_fd);
+  client_vec->pfds[i + 1] = POLLFD(client_fd);
 
   // update size
   client_vec->size += 1;
@@ -66,14 +70,15 @@ int add_client(client_vector_t *client_vec, int tcp_fd, int udp_fd,
 }
 
 void remove_client(client_vector_t *client_vec, int index) {
-  // destroy connection
-  destroy_connection(&client_vec->conns[index]);
+  client_connection_t *old_conn = client_vec->conns[index];
   // override current client with last client, then reduce count
   int size = client_vec->size;
   client_vec->conns[index] = client_vec->conns[size - 1];
   client_vec->pfds[index + 1] = client_vec->pfds[size];
-
   client_vec->size -= 1;
+
+  // destroy connection
+  destroy_connection(old_conn);
 }
 
 int resize_client_vector(client_vector_t *client_vec, int new_max) {
@@ -98,8 +103,8 @@ int resize_client_vector(client_vector_t *client_vec, int new_max) {
   // only resize if possible (i.e. resize != 0)
   if (resize) {
     // attempt to reallocate space for connections and pfds
-    client_connection_t *new_conns =
-        realloc(client_vec->conns, resize * sizeof(*client_vec->conns));
+    client_connection_t **new_conns =
+        realloc(client_vec->conns, resize * sizeof(client_connection_t *));
     struct pollfd *new_pfds =
         realloc(client_vec->pfds, (resize + 1) * sizeof(*client_vec->pfds));
 
