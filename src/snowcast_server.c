@@ -285,7 +285,7 @@ void process_input(char *msg, size_t size) {
     // for every station, print the current song and connected clients.
     for (size_t i = 0; i < station_control.num_stations; i++) {
       station = station_control.stations[i];
-      printf("[Station %d: \"%s\"]:\n", station->station_number,
+      printf("[Station %d: \"%s\"] listeners:\n", station->station_number,
              station->song_name);
       // iterate through connected clients
       client_connection_t *conn;
@@ -602,7 +602,7 @@ void handle_request(void *arg) {
         unlock_station_control(&station_control);
 
         // send response to client
-        sprintf(buf, "\"%s\" [switch to Station %d]", song_name, new_station);
+        sprintf(buf, "\"%s\" [switched to Station %d]", song_name, new_station);
         if (send_reply_msg(sockfd, REPLY_ANNOUNCE, strlen(buf), buf) == -1) {
           // on failure, remove client from connections
           fprintf(stderr, "[handle_request] See above error messages.\n");

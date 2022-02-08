@@ -3,8 +3,8 @@ CC = gcc
 # Source and Build directories
 SRC = ./src
 UTIL = $(SRC)/util
-BUILD = ./build
-OBJDIR = $(BUILD)/obj
+BUILD = .
+OBJDIR = $(BUILD)/build
 
 # Objects to compile
 OBJS = $(patsubst $(UTIL)/%.c, $(OBJDIR)/%.o, $(wildcard $(UTIL)/*.c))
@@ -12,7 +12,7 @@ FILES = $(wildcard src/*.c src/*.h)
 EXECS = snowcast_control snowcast_listener snowcast_server
 
 # Include util folders!
-FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL) -fsanitize=thread
+FLAGS = -Wall -Wextra -Wno-sign-compare -pthread -ggdb3 -I$(UTIL) -fsanitize=address
 
 # Pretty printing
 TOILET = toilet -f term -F border:metal
@@ -21,11 +21,10 @@ TOILET = toilet -f term -F border:metal
 
 .PHONY: all clean format
 
-all: | PRINT_START $(BUILD) $(EXECS) PRINT_DONE
+all: | PRINT_START $(OBJDIR) $(EXECS) PRINT_DONE
 
-$(BUILD):
-	@echo "$$($(TOILET) -F gay Build directory does not exist. Creating at \"$(BUILD)\"...)"
-	mkdir -p $@
+$(OBJDIR):
+	@echo "$$($(TOILET) -F gay Build directory does not exist. Creating at \"$(OBJDIR)\"...)"
 	mkdir -p $(OBJDIR)
 	@echo "$$($(TOILET) -F gay Done!)"
 
@@ -40,7 +39,7 @@ PRINT_OBJ:
 PRINT_DONE:
 	@echo
 	@echo "$$($(TOILET) -f pagga USAGE)"
-	@echo "Finished building. To use, go to the build directory ($(BUILD)), then run:"
+	@echo "Finished building. To use:"
 	@echo "\t - ./snowcast_server <PORT> [FILE1 [FILE2 [...]]]"
 	@echo "\t - ./snowcast_control <SERVERNAME> <SERVERPORT> <UDPPORT>"
 	@echo "\t - ./snowcast_listener <UDPPORT>"
@@ -63,8 +62,9 @@ snowcast_server: $(OBJS) $(SRC)/snowcast_server.c
 
 clean:
 	@echo "$$($(TOILET) -f pagga CLEAN)"
-	@echo "$$($(TOILET) -F gay Removing build directory...)"
-	rm -rf $(BUILD)
+	@echo "$$($(TOILET) -F gay Removing build files and executables...)"
+	rm -f snowcast_*
+	rm -rf $(OBJDIR)
 	@echo "$$($(TOILET) -F gay Done.)"
 	@echo
 
