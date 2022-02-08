@@ -64,13 +64,11 @@ int main(int argc, char *argv[]) {
       "\t'p': Print all stations, their current songs, and who's connected.\n"
       "\t'q': Terminate the server.\n");
 
-  printf("> ");
   // loop until REPL receives 'q' or '<C-D>' to stop.
   while (fgets(msg, MAXBUFSIZ, stdin)) {
     process_input(msg, MAXBUFSIZ);
     if (check_stopped(&server_control))
       break;
-    printf("> ");
   }
 
   // cleanup label XD honestly not a bad idea I think; I'd rather not wrap in a
@@ -101,8 +99,8 @@ int main(int argc, char *argv[]) {
   printf("Closed listener socket and shut down poller thread.\n");
 
   // destroy control structs
-  destroy_client_control(&client_control);
   destroy_station_control(&station_control);
+  destroy_client_control(&client_control);
   destroy_server_control(&server_control);
 
   printf("Goodbye!\n");
@@ -287,8 +285,8 @@ void process_input(char *msg, size_t size) {
     // for every station, print the current song and connected clients.
     for (size_t i = 0; i < station_control.num_stations; i++) {
       station = station_control.stations[i];
-      printf("[Station %d: \"%s\"] Connected clients:\n",
-             station->station_number, station->song_name);
+      printf("[Station %d: \"%s\"]:\n", station->station_number,
+             station->song_name);
       // iterate through connected clients
       client_connection_t *conn;
       sync_list_iterate_begin(&station->client_list, conn, client_connection_t,
@@ -476,6 +474,7 @@ void process_connection(void *arg) {
 }
 
 void pthread_unlock_cleanup_handler(void *arg) {
+  printf("Polling thread cancelled. Unlocking mutex...\n");
   pthread_mutex_unlock((pthread_mutex_t *)arg);
 }
 
@@ -511,7 +510,9 @@ void *poll_connections(void *arg) {
     num_events = poll(pfds, num_fds, -1);
 
     // once we're done polling, we can unlock the mutex
-    pthread_cleanup_pop(1);
+    // only execute cleanup on error, since it has a print statement
+    pthread_cleanup_pop(0);
+    unlock_client_control(&client_control);
 
     // if no event (somehow) or an error occurred, go again
     if (num_events <= 0) {

@@ -77,17 +77,17 @@ station_t *init_station(int station_number, char *song_name) {
 void destroy_station(station_t *station) {
   assert(station != NULL);
 
-  // don't need to destroy every client; client_control handles that
-  // this is just a mutex destroy; check if valid
-  if (sync_list_destroy(&(station->client_list)))
-    fprintf(stderr, "failed to destroy station %d's mutex.\n",
-            station->station_number);
-
   // cancel thread [TODO: implement cleanup handler for cancels]; do this before
   // closing, to prevent use after free/close
   int ret = pthread_cancel(station->streamer);
   if (ret)
     handle_error_en(ret, "destroy_station: pthread_cancel");
+
+  // don't need to destroy every client; client_control handles that
+  // this is just a mutex destroy; check if valid
+  if (sync_list_destroy(&(station->client_list)))
+    fprintf(stderr, "failed to destroy station %d's mutex.\n",
+            station->station_number);
 
   // close sockets
   close(station->ipv4_stream_fd);
