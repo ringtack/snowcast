@@ -223,3 +223,11 @@ void *stream_music_loop(void *arg) {
 
   return NULL;
 }
+
+void lock_station_clients(station_t *station) {
+  pthread_mutex_lock(&station->client_list.mtx);
+}
+
+void unlock_station_clients(station_t *station) {
+  pthread_mutex_unlock(&station->client_list.mtx);
+}

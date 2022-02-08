@@ -101,4 +101,14 @@ int send_to_connections(station_t *station);
  */
 void *stream_music_loop(void *arg);
 
+/**
+ * Locks the station client list.
+ */
+void lock_station_clients(station_t *station);
+
+/**
+ * Unlocks the station client list.
+ */
+void unlock_station_clients(station_t *station);
+
 #endif

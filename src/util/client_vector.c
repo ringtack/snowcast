@@ -81,6 +81,17 @@ void remove_client(client_vector_t *client_vec, int index) {
   destroy_connection(old_conn);
 }
 
+client_connection_t *get_client(client_vector_t *client_vec, int index) {
+  if (index >= client_vec->size) {
+    fprintf(stderr,
+            "[get_client] Index out of bounds [requested: %d, size: %zu]\n",
+            index, client_vec->size);
+    return NULL;
+  }
+
+  return client_vec->conns[index];
+}
+
 int resize_client_vector(client_vector_t *client_vec, int new_max) {
   size_t resize = 0;
   // if negative, check if we need to shrink

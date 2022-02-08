@@ -153,6 +153,36 @@ int init_client_control(client_control_t *client_control, int listener);
 void destroy_client_control(client_control_t *client_control);
 
 /**
+ * Locks a server control structure.
+ */
+void lock_server_control(server_control_t *server_control);
+
+/**
+ * Unlocks a server control structure.
+ */
+void unlock_server_control(server_control_t *server_control);
+
+/**
+ * Locks a station control structure.
+ */
+void lock_station_control(station_control_t *station_control);
+
+/**
+ * Unlocks a station control structure.
+ */
+void unlock_station_control(station_control_t *station_control);
+
+/**
+ * Locks a client control structure.
+ */
+void lock_client_control(client_control_t *client_control);
+
+/**
+ * Unlocks a client control structure.
+ */
+void unlock_client_control(client_control_t *client_control);
+
+/**
  * Handles user input from stdin.
  * - On 'p', prints a list of stations, along with all clients connected to
  * them.
@@ -175,6 +205,11 @@ void process_input(char *msg, size_t size);
  * - the value of stopped
  */
 int check_stopped(server_control_t *server_control);
+
+/**
+ * Synchronously get the number of stations.
+ */
+size_t get_num_stations(station_control_t *station_control);
 
 /**
  * Atomically increments a size_t.
@@ -201,7 +236,7 @@ int swap_stations(station_control_t *sc, client_connection_t *conn,
                   int new_station, int num_stations);
 
 /*
-===============================================================================
+ * ===============================================================================
  *                        THREAD STRUCTURES/FUNCTIONS
  * ===============================================================================
  */

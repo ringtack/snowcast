@@ -73,9 +73,9 @@ int main(int argc, char *argv[]) {
   /* |C|L|E|A|N|U|P| */
   /* +-+-+-+-+-+-+-+ */
   // set to stopped, in case someone typed <C-D>
-  pthread_mutex_lock(&server_control.server_mtx);
+  lock_server_control(&server_control);
   server_control.stopped = 1;
-  pthread_mutex_unlock(&server_control.server_mtx);
+  unlock_server_control(&server_control);
 
   printf("Exiting snowcast server...\n");
 
@@ -182,7 +182,7 @@ int init_station_control(station_control_t *station_control,
 
 void destroy_station_control(station_control_t *station_control) {
   // lock access to prevent others from editing stations while destroying
-  pthread_mutex_lock(&station_control->station_mtx);
+  lock_station_control(station_control);
   // cleanup all stations
   for (size_t i = 0; i < station_control->num_stations; i++)
     destroy_station(station_control->stations[i]);
@@ -190,7 +190,7 @@ void destroy_station_control(station_control_t *station_control) {
   free(station_control->stations);
 
   // unlock and destroy mutex
-  pthread_mutex_unlock(&station_control->station_mtx);
+  unlock_station_control(station_control);
 
   printf("Stopped stations. ");
 
@@ -221,10 +221,10 @@ int init_client_control(client_control_t *client_control, int listener) {
 
 void destroy_client_control(client_control_t *client_control) {
   // first, try lock then unlock to ensure that mutex is properly cleaned up
-  pthread_mutex_lock(&client_control->clients_mtx);
+  lock_client_control(client_control);
   // also synchronizes client cleanup
   destroy_client_vector(&client_control->client_vec);
-  pthread_mutex_unlock(&client_control->clients_mtx);
+  unlock_client_control(client_control);
 
   printf("Destroyed client information.\n");
 
@@ -239,19 +239,42 @@ void destroy_client_control(client_control_t *client_control) {
     handle_error_en(ret, "destroy_client_control: pthread_cond_destroy");
 }
 
+void lock_server_control(server_control_t *server_control) {
+  pthread_mutex_lock(&server_control->server_mtx);
+}
+
+void unlock_server_control(server_control_t *server_control) {
+  pthread_mutex_unlock(&server_control->server_mtx);
+}
+
+void lock_station_control(station_control_t *station_control) {
+  pthread_mutex_lock(&station_control->station_mtx);
+}
+
+void unlock_station_control(station_control_t *station_control) {
+  pthread_mutex_unlock(&station_control->station_mtx);
+}
+
+void lock_client_control(client_control_t *client_control) {
+  pthread_mutex_lock(&client_control->clients_mtx);
+}
+
+void unlock_client_control(client_control_t *client_control) {
+  pthread_mutex_unlock(&client_control->clients_mtx);
+}
+
 void process_input(char *msg, size_t size) {
   // if error, EOF, or 'q', mark server as stopped
   if (msg[0] == 'q') {
-    pthread_mutex_lock(&server_control.server_mtx);
+    lock_server_control(&server_control);
     server_control.stopped = 1;
-    pthread_mutex_unlock(&server_control.server_mtx);
+    unlock_server_control(&server_control);
     // otherwise, print information
   } else if (msg[0] == 'p') {
     // prevent changes to stations while we print
     // [TODO: maybe change to rwlock?]
     // TODO: this isn't necessary until I implement adding servers. Blegh!
-    pthread_mutex_lock(&station_control.station_mtx);
-
+    lock_station_control(&station_control);
     station_t *station;
     // for every station, print the current song and connected clients.
     for (size_t i = 0; i < station_control.num_stations; i++) {
@@ -272,7 +295,7 @@ void process_input(char *msg, size_t size) {
     }
 
     // allow changes again
-    pthread_mutex_unlock(&station_control.station_mtx);
+    unlock_station_control(&station_control);
   } else {
     fprintf(
         stderr,
@@ -283,10 +306,17 @@ void process_input(char *msg, size_t size) {
 }
 
 int check_stopped(server_control_t *server_control) {
-  pthread_mutex_lock(&server_control->server_mtx);
+  lock_server_control(server_control);
   int stopped = server_control->stopped;
-  pthread_mutex_unlock(&server_control->server_mtx);
+  unlock_server_control(server_control);
   return stopped;
+}
+
+size_t get_num_stations(station_control_t *station_control) {
+  lock_station_control(station_control);
+  size_t num_stations = station_control->num_stations;
+  unlock_station_control(station_control);
+  return num_stations;
 }
 
 void atomic_incr(size_t *val, pthread_mutex_t *mtx) {
@@ -311,15 +341,15 @@ int swap_stations(station_control_t *sc, client_connection_t *conn,
   if (old_station == -1) {
     conn->current_station = new_station;
     // synchronously add to list
-    pthread_mutex_lock(&sc->stations[new_station]->client_list.mtx);
+    lock_station_clients(sc->stations[new_station]);
     accept_connection(sc->stations[new_station], conn);
-    pthread_mutex_unlock(&sc->stations[new_station]->client_list.mtx);
+    unlock_station_clients(sc->stations[new_station]);
   } else if (old_station != new_station) {
     int lower_station = old_station < new_station ? old_station : new_station;
     int higher_station = old_station < new_station ? new_station : old_station;
     // otherwise, establish absolute order: lock lower station first
-    pthread_mutex_lock(&sc->stations[lower_station]->client_list.mtx);
-    pthread_mutex_lock(&sc->stations[higher_station]->client_list.mtx);
+    lock_station_clients(sc->stations[lower_station]);
+    lock_station_clients(sc->stations[higher_station]);
 
     conn->current_station = new_station;
     // remove from old station, then add to new
@@ -327,8 +357,8 @@ int swap_stations(station_control_t *sc, client_connection_t *conn,
     accept_connection(sc->stations[new_station], conn);
 
     // unlock
-    pthread_mutex_unlock(&sc->stations[higher_station]->client_list.mtx);
-    pthread_mutex_unlock(&sc->stations[lower_station]->client_list.mtx);
+    unlock_station_clients(sc->stations[higher_station]);
+    unlock_station_clients(sc->stations[lower_station]);
   }
   // if identical, do nothing
   return 0;
@@ -390,12 +420,10 @@ void process_connection(void *arg) {
   printf("Received Hello!\nSending Welcome... ");
 
   // get num stations
-  pthread_mutex_lock(&station_control.station_mtx);
-  size_t num_stations = station_control.num_stations;
-  pthread_mutex_unlock(&station_control.station_mtx);
+  size_t num_stations = get_num_stations(&station_control);
 
   // synchronize access to client connections
-  pthread_mutex_lock(&client_control.clients_mtx);
+  lock_client_control(&client_control);
   // wrap in do {...} while(0) to allow breaking
   do {
     // attempt to add client
@@ -420,7 +448,7 @@ void process_connection(void *arg) {
   // unlock; if we're the last pending operation, signal to cv
   if (--client_control.num_pending == 0)
     pthread_cond_signal(&client_control.pending_cond);
-  pthread_mutex_unlock(&client_control.clients_mtx);
+  unlock_client_control(&client_control);
 }
 
 void pthread_unlock_cleanup_handler(void *arg) {
@@ -435,7 +463,7 @@ void *poll_connections(void *arg) {
   // repeat until stopped
   while (!check_stopped(&server_control)) {
     // first, check if any client operations are still pending
-    pthread_mutex_lock(&client_control.clients_mtx);
+    lock_client_control(&client_control);
     pthread_cleanup_push(pthread_unlock_cleanup_handler,
                          &client_control.clients_mtx);
     while (client_control.num_pending > 0) {
@@ -506,9 +534,23 @@ void handle_request(void *arg) {
     fprintf(stderr, "[handle_request] See above. result: %d\n", res);
     // only close if it was client disconnecting
     if (res == 1) {
-      pthread_mutex_lock(&client_control.clients_mtx);
+      // get which connection it is
+      lock_client_control(&client_control);
+      client_connection_t *conn = get_client(&client_control.client_vec, index);
+      int which_station = conn->current_station;
+
+      // lock station
+      lock_station_clients(station_control.stations[which_station]);
+      // remove from station
+      remove_connection(conn);
+      // successfully cleaned up from station
+      unlock_station_clients(station_control.stations[which_station]);
+
+      // remove client from client vector
       remove_client(&client_control.client_vec, index);
-      pthread_mutex_unlock(&client_control.clients_mtx);
+
+      // done with client control
+      unlock_client_control(&client_control);
     }
   } else {
     // sanity check; recv_command_msg should only be NULL if res != 0
@@ -519,18 +561,17 @@ void handle_request(void *arg) {
     memset(buf, 0, sizeof(buf));
     if (type == MESSAGE_SET_STATION) {
       // get num stations
-      pthread_mutex_lock(&station_control.station_mtx);
-      int num_stations = station_control.num_stations;
-      pthread_mutex_unlock(&station_control.station_mtx);
+      int num_stations = get_num_stations(&station_control);
 
       // swap stations
       uint16_t new_station = ((set_station_t *)msg)->station_number;
       printf("New station: %d\n", new_station);
-      pthread_mutex_lock(&client_control.clients_mtx);
+      lock_client_control(&client_control);
       res = swap_stations(&station_control,
-                          client_control.client_vec.conns[index], new_station,
-                          num_stations);
-      pthread_mutex_unlock(&client_control.clients_mtx);
+                          get_client(&client_control.client_vec, index),
+                          new_station, num_stations);
+      unlock_client_control(&client_control);
+
       // if they had invalid set stations request, send invalid request reply
       if (res == -1) {
         sprintf(buf,
@@ -540,14 +581,15 @@ void handle_request(void *arg) {
       } else {
         // otherwise, announce to client that station switch was successful
         // synchronize access
-        pthread_mutex_lock(&station_control.station_mtx);
+        lock_station_control(&station_control);
 
         // get station's song
         char song_name[MAXSONGLEN];
         memset(song_name, 0, sizeof(song_name));
         strcpy(song_name, station_control.stations[new_station]->song_name);
+
         // no longer need synchronization
-        pthread_mutex_unlock(&station_control.station_mtx);
+        unlock_station_control(&station_control);
 
         // send response to client
         sprintf(buf, "Switched to Station %d. Now playing: [\"%s\"]",
@@ -567,8 +609,8 @@ void handle_request(void *arg) {
   }
 
   // decrement and potentially signal to cv
-  pthread_mutex_lock(&client_control.clients_mtx);
+  lock_client_control(&client_control);
   if (--client_control.num_pending == 0)
     pthread_cond_signal(&client_control.pending_cond);
-  pthread_mutex_unlock(&client_control.clients_mtx);
+  unlock_client_control(&client_control);
 }

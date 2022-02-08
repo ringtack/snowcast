@@ -80,6 +80,18 @@ int add_client(client_vector_t *client_vec, int client_fd, uint16_t udp_port,
 void remove_client(client_vector_t *client_vec, int index);
 
 /**
+ * Gets the client at index i.
+ *
+ * Inputs:
+ * - client_vector_t *client_vec: pointer to a vector of client connections
+ * - int index: index of client to delete
+ *
+ * Returns:
+ * - dynamically allocated connection, or NULL if invalid index
+ */
+client_connection_t *get_client(client_vector_t *client_vec, int index);
+
+/**
  * Resizes the client vector:
  *  - if positive, must have new_max >= size
  *  - if negative, shrinks if appropriate i.e. size < max / 2.
