@@ -237,17 +237,20 @@ class Client:
 #  server.quit_server()
 
 
-server_port = 8080
+server_port = 9000
+num_clients = 500
+num_iters = 200
+
 clients = list()
 
-for i in range(50):
-    clients.append(Client(8080, 10000 + i))
+for i in range(num_clients):
+    clients.append(Client(server_port, 10000 + i))
     print(f"Created client {i}: {clients[i]}")
 
-for _ in range(100):
-    for i in range(50):
+for _ in range(num_iters):
+    for i in range(num_clients):
         if clients[i].is_dead():
-            clients[i] = Client(8080, 10000 + i)
+            clients[i] = Client(server_port, 10000 + i)
         print(f"Created client {i}: {clients[i]}")
 
     for _ in range(5):
@@ -255,12 +258,12 @@ for _ in range(100):
             curr_client = clients[i]
             if curr_client.is_dead():
                 curr_client.quit()
-                clients[i] = Client(8080, curr_client.listener_port)
-            clients[i].join_station(random.randint(0, 5))
-        time.sleep(0.5)
+                clients[i] = Client(server_port, curr_client.listener_port)
+            clients[i].join_station(random.randint(0, 7))
+        time.sleep(0.2)
 
     print("Listening...")
-    time.sleep(2.5)
+    time.sleep(1.5)
 
     for client in clients:
         # randonly kill a client
