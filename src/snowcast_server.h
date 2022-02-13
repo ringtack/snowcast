@@ -282,7 +282,6 @@ void *poll_connections(void *arg);
 
 typedef struct {
   int sockfd;
-  int index;
 } handle_request_t;
 
 /**

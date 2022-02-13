@@ -92,6 +92,14 @@ client_connection_t *get_client(client_vector_t *client_vec, int index) {
   return client_vec->conns[index];
 }
 
+int get_client_index(client_vector_t *client_vec, int sockfd) {
+  for (int i = 0; i < client_vec->size; i++) {
+    if (client_vec->conns[i]->client_fd == sockfd)
+      return i;
+  }
+  return -1;
+}
+
 int resize_client_vector(client_vector_t *client_vec, int new_max) {
   size_t resize = 0;
   // if negative, check if we need to shrink

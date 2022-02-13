@@ -92,6 +92,18 @@ void remove_client(client_vector_t *client_vec, int index);
 client_connection_t *get_client(client_vector_t *client_vec, int index);
 
 /**
+ * Gets the index of the client with socket sockfd.
+ *
+ * Inputs:
+ * - client_vector_t *client_vec: pointer to a vector of client connections
+ * - int sockfd: client socket
+ *
+ * Returns:
+ * - index of the client on success, -1 if not in list
+ */
+int get_client_index(client_vector_t *client_vec, int sockfd);
+
+/**
  * Resizes the client vector:
  *  - if positive, must have new_max >= size
  *  - if negative, shrinks if appropriate i.e. size < max / 2.

@@ -123,7 +123,7 @@ int get_socket(const char *hostname, const char *port, int socktype) {
   struct addrinfo hints, *res, *r;
   // set hints
   memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_UNSPEC;
+  hints.ai_family = AF_INET;
   hints.ai_socktype = socktype;
   // if no hostname, use our own
   if (!hostname)
