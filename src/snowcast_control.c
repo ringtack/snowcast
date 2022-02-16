@@ -83,7 +83,8 @@ int main(int argc, char *argv[]) {
     // poll indefinitely
     sc.num_events = poll(sc.pfds, 2, -1);
     // unlock mutex
-    pthread_cleanup_pop(1);
+    pthread_cleanup_pop(0);
+    unlock_snowcast_control(&sc);
 
     // if no event (somehow) or an error occurred, go again
     if (sc.num_events <= 0) {
@@ -121,12 +122,12 @@ void *process_input() {
     if (isdigit(msg[0])) {
       uint16_t station = atoi(msg);
       int ret = send_command_msg(sc.pfds[1].fd, MESSAGE_SET_STATION, station);
-      if (ret) {
+      if (!ret) {
+        printf("Waiting for an announce...\n");
+      } else {
         // if failed to send, display error and shut down.
         fprintf(stderr, "Failed to send message to server.\n");
         toggle_stopped(&sc);
-      } else {
-        printf("Waiting for an announce...\n");
       }
       // if 'q', quit out
     } else if (msg[0] == 'q') {
