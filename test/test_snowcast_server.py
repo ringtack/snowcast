@@ -238,7 +238,7 @@ class Client:
 
 
 server_port = 9000
-num_clients = 500
+num_clients = 200
 num_iters = 200
 
 clients = list()
