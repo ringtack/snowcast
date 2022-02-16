@@ -138,6 +138,9 @@ void *process_input() {
       // if 'q', quit out
     } else if (msg[0] == 'q') {
       toggle_stopped(&sc);
+    } else {
+      printf("> ");
+      fflush(stdout);
     }
   } else {
     fprintf(stderr, "Received EOF/error. Shutting down...\n");
