@@ -15,7 +15,7 @@
 typedef struct {
   pthread_mutex_t control_mtx; // synchronize poll calls
   pthread_cond_t control_cond; // synchronize poll calls
-  size_t num_events;           // record num pending
+  int num_events;              // record num pending
   int stopped;                 // record if client should stop
   struct pollfd pfds[2];       // poll for `stdin` and `server_fd`
 } snowcast_control_t;
@@ -60,17 +60,17 @@ void pthread_unlock_cleanup_handler(void *arg);
 /**
  * Helper functions to change values. Returns the old value.
  */
-size_t atomic_incr(size_t *val, pthread_mutex_t *mtx);
-size_t atomic_decr(size_t *val, pthread_mutex_t *mtx);
+int atomic_incr(int *val, pthread_mutex_t *mtx);
+int atomic_decr(int *val, pthread_mutex_t *mtx);
 
 /**
  * Processes user input.
  */
-void *process_input(void *arg);
+void *process_input();
 
 /**
  * Processes server reply.
  */
-void *process_reply(void *arg);
+void *process_reply();
 
 #endif

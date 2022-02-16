@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-void *process_input(void *arg) {
+void *process_input() {
   // can use static, since only this function accesses
   static char msg[MAXBUFSIZ];
   memset(msg, 0, sizeof(msg));
@@ -147,7 +147,7 @@ void *process_input(void *arg) {
   return NULL;
 }
 
-void *process_reply(void *arg) {
+void *process_reply() {
   uint8_t type;
   void *msg = recv_reply_msg(sc.pfds[0].fd, &type);
   if (!msg) {
@@ -232,16 +232,16 @@ void pthread_unlock_cleanup_handler(void *arg) {
   pthread_mutex_unlock((pthread_mutex_t *)arg);
 }
 
-size_t atomic_incr(size_t *val, pthread_mutex_t *mtx) {
+int atomic_incr(int *val, pthread_mutex_t *mtx) {
   pthread_mutex_lock(mtx);
-  size_t old = (*val)++;
+  int old = (*val)++;
   pthread_mutex_unlock(mtx);
   return old;
 }
 
-size_t atomic_decr(size_t *val, pthread_mutex_t *mtx) {
+int atomic_decr(int *val, pthread_mutex_t *mtx) {
   pthread_mutex_lock(mtx);
-  size_t old = (*val)--;
+  int old = (*val)--;
   pthread_mutex_unlock(mtx);
   return old;
 }
