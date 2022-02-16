@@ -3,6 +3,6 @@
 
 #include "./util/protocol.h"
 
-void test(char *argv[]);
+#define BSIZ 1024
 
 #endif

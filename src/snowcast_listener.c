@@ -1,57 +1,32 @@
 #include "snowcast_listener.h"
 
 int main(int argc, char *argv[]) {
-  if (argc != 4) {
-    fprintf(
-        stderr,
-        "Usage: ./snowcast_control <SERVER_NAME> <SERVER_PORT> <UDP_PORT>\n");
+  if (argc != 2) {
+    fprintf(stderr, "Usage: ./snowcast_listener <PORT>\n");
+    exit(1);
+  }
+  const char *port = argv[1];
+  // host name doesn't matter
+  int udp_fd = get_socket(NULL, port, SOCK_DGRAM);
+
+  if (udp_fd == -1) {
     exit(1);
   }
 
-  test(argv);
+  char buf[BSIZ];
+  while (1) {
+    // we don't care about receiving all the information or knowing where it
+    // came from
+    memset(buf, 0, sizeof(buf));
+    int ret = recvfrom(udp_fd, buf, BSIZ, 0, NULL, NULL);
+    if (ret == -1) {
+      perror("recvfrom");
+      exit(1);
+    }
+
+    // print all information received
+    fwrite(buf, sizeof(char), BSIZ, stdout);
+  }
 
   return 0;
-}
-
-void test(char *argv[]) {
-  int sockfd = get_socket(argv[1], argv[2], SOCK_STREAM);
-  if (sockfd == -1) {
-    fprintf(stderr, "could not connect!\n");
-    exit(1);
-  }
-
-  uint16_t port = atoi(argv[3]);
-  printf("UDP port is %d\n", port);
-  send_command_msg(sockfd, MESSAGE_HELLO, port);
-
-  for (int i = 0; i < 4; i++) {
-
-    uint8_t type;
-    void *reply = recv_reply_msg(sockfd, &type);
-
-    switch (type) {
-    case REPLY_WELCOME: {
-      welcome_t *welcome = (welcome_t *)reply;
-      printf("Welcome to Snowcast! There are %d stations.\n",
-             welcome->num_stations);
-      break;
-    }
-    case REPLY_ANNOUNCE: {
-      announce_t *announcement = (announce_t *)reply;
-      printf("Anouncement: switched to song \"%s\"\n", announcement->songname);
-      break;
-    }
-    case REPLY_INVALID: {
-      invalid_command_t *invalid = (invalid_command_t *)reply;
-      fprintf(stderr, "You sent an invalid command! Response: \"%s\"\n",
-              invalid->reply_string);
-      break;
-    }
-    default: {
-      fprintf(stderr, "The server sent an invalid reply!\n");
-      break;
-    }
-    }
-    free(reply);
-  }
 }
