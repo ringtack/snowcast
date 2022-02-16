@@ -28,5 +28,6 @@ int main(int argc, char *argv[]) {
     fwrite(buf, sizeof(char), BSIZ, stdout);
   }
 
+  close(udp_fd);
   return 0;
 }
