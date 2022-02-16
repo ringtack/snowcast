@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 
   // loop until we break out: either server sends invalid request or client
   // quits
-  while (1) {
+  while (check_stopped(&sc)) {
     // if any pending events to complete, wait
     lock_snowcast_control(&sc);
     // push cleanup handler in case of cancel
@@ -95,7 +95,6 @@ int main(int argc, char *argv[]) {
 
     // if client typed something, spawn a thread to handle
     if (sc.pfds[0].revents & POLLIN) {
-      atomic_incr(&sc.num_events, &sc.control_mtx);
       pthread_t th;
       pthread_create(&th, NULL, process_input, NULL);
       pthread_detach(th);
@@ -103,12 +102,15 @@ int main(int argc, char *argv[]) {
 
     // if server sent reply, spawn a thread to handle
     if (sc.pfds[1].revents & POLLIN) {
-      atomic_incr(&sc.num_events, &sc.control_mtx);
       pthread_t th;
       pthread_create(&th, NULL, process_reply, NULL);
       pthread_detach(th);
     }
   }
+  lock_snowcast_control(&sc);
+  while (sc.num_events > 0)
+    pthread_cond_wait(&sc.control_cond, &sc.control_mtx);
+  unlock_snowcast_control(&sc);
 
   return 0;
 }
@@ -150,7 +152,7 @@ void *process_input() {
 
 void *process_reply() {
   uint8_t type;
-  void *msg = recv_reply_msg(sc.pfds[0].fd, &type);
+  void *msg = recv_reply_msg(sc.pfds[1].fd, &type);
   if (!msg) {
     fprintf(stderr, "Failed to receive reply from server. Shutting down...\n");
     toggle_stopped(&sc);
