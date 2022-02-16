@@ -68,8 +68,6 @@ int main(int argc, char *argv[]) {
   while (!check_stopped(&sc)) {
     // if any pending events to complete, wait
     lock_snowcast_control(&sc);
-    // push cleanup handler in case of cancel
-    pthread_cleanup_push(pthread_unlock_cleanup_handler, &sc.control_mtx);
 
     // wait until REPL/client handlers are done
     while (sc.num_events > 0) {
@@ -81,6 +79,8 @@ int main(int argc, char *argv[]) {
       break;
     }
 
+    // push cleanup handler in case of cancel
+    pthread_cleanup_push(pthread_unlock_cleanup_handler, &sc.control_mtx);
     // poll indefinitely
     sc.num_events = poll(sc.pfds, 2, -1);
     // unlock mutex
