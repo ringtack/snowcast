@@ -27,7 +27,6 @@ int main(int argc, char *argv[]) {
   printf("Type in a number to set the station on which we're listening to that "
          "number.\n");
   printf("Type in 'q', Ctrl-D, or Ctrl-C to quit.\n");
-  printf("> ");
 
   // Send Hello, and await Welcome. If the server sends anything else, report
   // incorrect command and exit.
@@ -62,9 +61,11 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
+  printf("> ");
+  fflush(stdout);
   // loop until we break out: either server sends invalid request or client
   // quits
-  while (check_stopped(&sc)) {
+  while (!check_stopped(&sc)) {
     // if any pending events to complete, wait
     lock_snowcast_control(&sc);
     // push cleanup handler in case of cancel
@@ -107,11 +108,14 @@ int main(int argc, char *argv[]) {
       pthread_detach(th);
     }
   }
+  // need to wait, in case threads are not done with processing yet
   lock_snowcast_control(&sc);
   while (sc.num_events > 0)
     pthread_cond_wait(&sc.control_cond, &sc.control_mtx);
   unlock_snowcast_control(&sc);
 
+  // cleanup
+  destroy_snowcast_control(&sc);
   return 0;
 }
 
@@ -160,6 +164,7 @@ void *process_reply() {
     announce_t *announce = (announce_t *)msg;
     printf("New song announced: %s\n", announce->songname);
     printf("> ");
+    fflush(stdout);
   } else if (type == REPLY_INVALID) {
     invalid_command_t *invalid = (invalid_command_t *)msg;
     fprintf(stderr, "INVALID_COMMAND_REPLY: %s\n", invalid->reply_string);
