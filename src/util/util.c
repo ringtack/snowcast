@@ -109,7 +109,7 @@ int recvall(int sockfd, void *buf, int len) {
     }
     // display if server disconnected
     if (n == 0) {
-      fprintf(stderr, "[Client %d] closed the connection.\n", sockfd);
+      fprintf(stderr, "[Socket %d] closed the connection.\n", sockfd);
       return 1;
     }
     // otherwise, update counts
