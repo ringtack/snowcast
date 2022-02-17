@@ -424,72 +424,76 @@ void process_connection(void *arg) {
   struct sockaddr_storage from_addr;
   socklen_t addr_len = sizeof(from_addr);
 
-  // accept client; this shouldn't block, since it's only called upon return
-  // from poll.
-  int client_fd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
-  if (client_fd == -1) {
-    // if errors, exit function prematurely
-    perror("process_connection: accept");
-    return;
-  }
-
-  get_address(address, (struct sockaddr *)&from_addr);
-  printf("[Client %d] New client connected from %s; Awaiting a Hello...\n",
-         client_fd, address);
-
-  // wait for a response; this times out after 100ms, so if client still doesn't
-  // send HELLO, they get disconnected.
-  uint8_t type;
-  int res;
-  void *msg = recv_command_msg(client_fd, &type, &res);
-  // if NULL, an error occurred while recving, close the connection
-  if (msg == NULL) {
-    fprintf(stderr,
-            "[process_connection] Failed to receive message from client %s. "
-            "Closing connection...\n",
-            address);
-    close(client_fd);
-    return;
-  }
-  // if reply type is not MESSAGE_HELLO, close the connection
-  if (type != MESSAGE_HELLO) {
-    fprintf(
-        stderr,
-        "[Client %d] Sent incorrect initial message. Expected: %s\tGot: %s\n",
-        client_fd, "MESSAGE_HELLO",
-        type > MESSAGE_SET_STATION ? "NEITHER" : "MESSAGE_SET_STATION");
-    close(client_fd);
-    return;
-  }
-  // get UDP port from message, then free it (we don't need anymore)
-  uint16_t udp_port = ((hello_t *)msg)->udp_port;
-  free(msg);
-
-  printf("[Client %d] Received Hello! Sending Welcome...\n", client_fd);
-
-  // get num stations
-  size_t num_stations = get_num_stations(&station_control);
-
-  // synchronize access to client connections
-  lock_client_control(&client_control);
   // wrap in do {...} while(0) to allow breaking
+  // attempt to add client
   do {
-    // attempt to add client
+    // accept client; this shouldn't block, since it's only called upon return
+    // from poll.
+    int client_fd = accept(listener, (struct sockaddr *)&from_addr, &addr_len);
+    if (client_fd == -1) {
+      // if errors, exit function prematurely
+      perror("process_connection: accept");
+      break;
+    }
+
+    get_address(address, (struct sockaddr *)&from_addr);
+    printf("[Client %d] New client connected from %s; Awaiting a Hello...\n",
+           client_fd, address);
+
+    // wait for a response; this times out after 100ms, so if client still
+    // doesn't send HELLO, they get disconnected.
+    uint8_t type;
+    int res;
+    void *msg = recv_command_msg(client_fd, &type, &res);
+    // if NULL, an error occurred while recving, close the connection
+    if (msg == NULL) {
+      fprintf(stderr,
+              "[process_connection] Failed to receive message from client %s. "
+              "Closing connection...\n",
+              address);
+      close(client_fd);
+      break;
+    }
+    // if reply type is not MESSAGE_HELLO, close the connection
+    if (type != MESSAGE_HELLO) {
+      fprintf(
+          stderr,
+          "[Client %d] Sent incorrect initial message. Expected: %s\tGot: %s\n",
+          client_fd, "MESSAGE_HELLO",
+          type > MESSAGE_SET_STATION ? "INVALID TYPE" : "MESSAGE_SET_STATION");
+      fprintf(stderr, "Closing connection [%d]...\n", client_fd);
+      close(client_fd);
+      break;
+    }
+    // get UDP port from message, then free it (we don't need anymore)
+    uint16_t udp_port = ((hello_t *)msg)->udp_port;
+    free(msg);
+
+    printf("[Client %d] Received Hello! Sending Welcome...\n", client_fd);
+
+    // get num stations
+    size_t num_stations = get_num_stations(&station_control);
+
+    // synchronize access to client connections
+    lock_client_control(&client_control);
     int index = add_client(&client_control.client_vec, client_fd, udp_port,
                            (struct sockaddr *)&from_addr, addr_len);
     // on failure, close client connection and stop
     if (index == -1) {
       close(client_fd);
+      unlock_client_control(&client_control);
       break;
     }
     // send "Welcome" reply message; if fails, close stuff
     if (send_reply_msg(client_fd, REPLY_WELCOME, num_stations, NULL)) {
       fprintf(stderr, "Failed to send Welcome. Closing connection.\n");
       remove_client(&client_control.client_vec, index);
+      unlock_client_control(&client_control);
       break;
     }
   } while (0);
 
+  lock_client_control(&client_control);
   // unlock; if we're the last pending operation, signal to cv
   if (--client_control.num_pending == 0)
     pthread_cond_signal(&client_control.pending_cond);
