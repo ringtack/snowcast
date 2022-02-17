@@ -128,6 +128,9 @@ void *process_input() {
     if (isdigit(msg[0])) {
       uint16_t station = atoi(msg);
       int ret = send_command_msg(sc.pfds[1].fd, MESSAGE_SET_STATION, station);
+      lock_snowcast_control(&sc);
+      sc.pending = 0;
+      unlock_snowcast_control(&sc);
       if (!ret) {
         printf("Waiting for an announce...\n");
       } else {
@@ -164,10 +167,19 @@ void *process_reply() {
     fprintf(stderr, "Failed to receive reply from server. Shutting down...\n");
     toggle_stopped(&sc);
   } else if (type == REPLY_ANNOUNCE) {
-    announce_t *announce = (announce_t *)msg;
-    printf("New song announced: %s\n", announce->songname);
-    printf("> ");
-    fflush(stdout);
+    lock_snowcast_control(&sc);
+    if (sc.pending) {
+      fprintf(stderr,
+              "Server sent ANNOUNCE before SET_STATION. Shutting down...\n");
+      sc.stopped = 1;
+      unlock_snowcast_control(&sc);
+    } else {
+      unlock_snowcast_control(&sc);
+      announce_t *announce = (announce_t *)msg;
+      printf("New song announced: %s\n", announce->songname);
+      printf("> ");
+      fflush(stdout);
+    }
   } else if (type == REPLY_INVALID) {
     invalid_command_t *invalid = (invalid_command_t *)msg;
     fprintf(stderr, "INVALID_COMMAND_REPLY: %s\n", invalid->reply_string);
@@ -177,7 +189,6 @@ void *process_reply() {
     toggle_stopped(&sc);
   }
   free(msg);
-
   // decrement number of events we're waiting on, and if we hit 0, signal to
   // main thread.
   lock_snowcast_control(&sc);
@@ -201,6 +212,7 @@ int init_snowcast_control(snowcast_control_t *sc, int server_fd) {
   }
   sc->num_events = 0;
   sc->stopped = 0;
+  sc->pending = 1;
   sc->pfds[0] = POLLFD(STDIN_FILENO);
   sc->pfds[1] = POLLFD(server_fd);
   return 0;

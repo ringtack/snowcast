@@ -17,6 +17,7 @@ typedef struct {
   pthread_cond_t control_cond; // synchronize poll calls
   int num_events;              // record num pending
   int stopped;                 // record if client should stop
+  int pending;                 // record if we're waiting for an Announce
   struct pollfd pfds[2];       // poll for `stdin` and `server_fd`
 } snowcast_control_t;
 
