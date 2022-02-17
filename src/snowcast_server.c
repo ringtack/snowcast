@@ -491,6 +491,7 @@ void process_connection(void *arg) {
       unlock_client_control(&client_control);
       break;
     }
+    unlock_client_control(&client_control);
   } while (0);
 
   lock_client_control(&client_control);
