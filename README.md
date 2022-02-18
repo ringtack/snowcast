@@ -47,7 +47,7 @@ manages all "work" a server must perform in response to clients (i.e. accepting 
 responding to client commands).
 
 > In other worlds, I also had the thread pool handle station streaming, but I decided against it
-> rather arbitrarily. I will detail this slightly more in the section on stations.
+> rather arbitrarily.
 
 Because `t_pool` already handles synchronizing adding jobs to the thread pool, `server_mtx` and
 `server_cond`, together with `stopped`, are instead used solely for cleanup. When the server REPL
