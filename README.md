@@ -1,7 +1,5 @@
 # Snowcast
 
-NOTE: I am using a late day on this! Please use my latest commit before 11:59PM EST, 2/17.
-
 Welcome to Snowcast, the 100% secure streaming service fitted with a wide variety of tunes. Poke
 around, and please don't crash the server (ˆ ﻌ ˆ)♡
 
