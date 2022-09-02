@@ -63,7 +63,7 @@ snowcast_server: $(OBJS) $(SRC)/snowcast_server.c
 clean:
 	@echo "$$($(TOILET) -f pagga CLEAN)"
 	@echo "$$($(TOILET) -F gay Removing build files and executables...)"
-	rm -f snowcast_*
+	rm -rf snowcast_*
 	rm -rf $(OBJDIR)
 	@echo "$$($(TOILET) -F gay Done.)"
 	@echo

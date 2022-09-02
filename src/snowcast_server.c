@@ -293,9 +293,7 @@ void process_input(char *msg, size_t size) {
     // for every station, print the current song and connected clients.
     for (size_t i = 0; i < station_control.num_stations; i++) {
       station = station_control.stations[i];
-      fprintf(out, "[Station %d: \"%s\"] listeners:\n", station->station_number,
-              station->song_name);
-      // iterate through connected clients
+      fprintf(out, "%d,%s", station->station_number, station->song_name);
       client_connection_t *conn;
       sync_list_iterate_begin(&station->client_list, conn, client_connection_t,
                               link) {
@@ -303,9 +301,10 @@ void process_input(char *msg, size_t size) {
         memset(msg, 0, size);
         // get and print client info
         get_address(msg, (struct sockaddr *)&conn->udp_addr);
-        fprintf(out, "\t - %s\n", msg);
+        fprintf(out, ",%s", msg);
       }
       sync_list_iterate_end(&station->client_list);
+      fprintf(out, "\n");
     }
 
     // close file if we don't need anymore
@@ -583,9 +582,10 @@ void handle_request(void *arg) {
   // if failed to receive message, server closes connection
   if (res != 0) {
     // this case handles if msg == NULL! Only close if client disconnected.
-    if (res == 1) {
-      remove_client_from_server(&client_control, &station_control, sockfd);
+    if (res == -1) {
+      fprintf(stderr, "[Client %d] Invalid command type.\n", sockfd);
     }
+    remove_client_from_server(&client_control, &station_control, sockfd);
   } else {
     // sanity check; recv_command_msg should only be NULL if res != 0
     assert(msg != NULL);
